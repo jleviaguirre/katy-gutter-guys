@@ -1,0 +1,301 @@
+<!--
+  Home module - renders the "landing page" sheet tab as a full marketing
+  page built from composable sections (masthead, hero, trust bar, services,
+  how-it-works, gallery, testimonials, FAQ, CTA banner, footer).
+
+  Paste this ENTIRE block into the "html" column of the Modules sheet, on
+  the row with module = home. It is a self-contained bootstrap: it fetches
+  every row from the "landing page" tab (section, content, assets), resolves
+  each row's `assets` JSON array of URLs (Drive links, YouTube links, or
+  direct media URLs - auto-detected/resolved server-side in Code.gs) into
+  ready-to-use embeds, and stitches all rows together in sheet-row order.
+
+  Each "landing page" row's `content` cell is plain HTML that can reference
+  that row's own assets with:
+    {{asset:0}}      -> a fully-rendered embed tag (img/video/iframe/audio)
+                        for assets[0], auto-picked from its detected type
+    {{assetUrl:0}}   -> just the resolved URL for assets[0], for custom
+                        markup (e.g. a CSS background-image)
+    {{assets:grid}}  -> renders EVERY asset in that row as a responsive grid
+                        of embeds, regardless of how many there are
+
+  See /docs/modules/landing-page-rows.md for ready-to-paste row content.
+-->
+<div id="lp-root">
+  <p class="lp-loading">Loading&hellip;</p>
+</div>
+
+<style>
+  #lp-root { --lp-accent: #f2994a; }
+
+  .lp-loading, .lp-error { text-align: center; padding: 3rem 1rem; color: var(--color-muted, #5b6b7a); }
+  .lp-container { width: min(1120px, 100%); margin: 0 auto; padding: 0 1.25rem; }
+
+  /* Masthead */
+  .lp-masthead {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; padding: 0.9rem 1.25rem;
+    background: #ffffff; border-bottom: 1px solid var(--color-border, #d7e4f0);
+  }
+  .lp-masthead-brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 1.15rem; color: var(--color-text, #1b2733); text-decoration: none; }
+  .lp-masthead-brand svg { color: var(--color-primary, #0b5fa5); }
+  .lp-nav { display: flex; align-items: center; gap: 1.5rem; }
+  .lp-nav a, .lp-nav button.lp-nav-link {
+    background: none; border: none; font: inherit; cursor: pointer;
+    color: var(--color-text, #1b2733); text-decoration: none; font-weight: 600; font-size: 0.95rem;
+  }
+  .lp-nav a:hover, .lp-nav button.lp-nav-link:hover { color: var(--color-primary, #0b5fa5); }
+  .lp-nav-toggle { display: none; background: none; border: none; cursor: pointer; padding: 0.3rem; }
+  .lp-masthead-cta {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    background: var(--color-primary, #0b5fa5); color: #fff; font-weight: 700;
+    padding: 0.55rem 1.1rem; border-radius: 0.5rem; text-decoration: none; font-size: 0.9rem;
+    white-space: nowrap;
+  }
+  .lp-masthead-cta:hover { opacity: 0.9; }
+
+  /* Hero */
+  .lp-hero {
+    position: relative; color: #ffffff; padding: 4.5rem 1.25rem;
+    background-size: cover; background-position: center;
+    background-color: var(--color-text, #1b2733);
+  }
+  .lp-hero::before {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(11,20,33,0.72), rgba(11,20,33,0.55));
+  }
+  .lp-hero-inner { position: relative; max-width: 640px; }
+  .lp-hero h1 { font-size: clamp(1.9rem, 4vw, 3rem); line-height: 1.15; margin: 0 0 1rem; }
+  .lp-hero p { font-size: 1.1rem; opacity: 0.92; margin: 0 0 1.75rem; }
+  .lp-hero-ctas { display: flex; flex-wrap: wrap; gap: 0.85rem; }
+  .lp-btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.8rem 1.4rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.95rem;
+    text-decoration: none; cursor: pointer; border: 2px solid transparent;
+  }
+  .lp-btn-primary { background: var(--lp-accent); color: #1b2733; }
+  .lp-btn-primary:hover { opacity: 0.92; }
+  .lp-btn-outline { background: transparent; color: #fff; border-color: rgba(255,255,255,0.7); }
+  .lp-btn-outline:hover { background: rgba(255,255,255,0.12); }
+
+  /* Trust bar */
+  .lp-trust-bar { background: var(--color-bg, #eaf4ff); padding: 2rem 1.25rem; }
+  .lp-trust-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1.5rem; text-align: center;
+  }
+  .lp-trust-number { font-size: 1.8rem; font-weight: 800; color: var(--color-primary, #0b5fa5); }
+  .lp-trust-label { font-size: 0.85rem; color: var(--color-muted, #5b6b7a); margin-top: 0.2rem; }
+
+  /* Generic section heading */
+  .lp-section { padding: 4rem 1.25rem; }
+  .lp-section-alt { background: var(--color-bg, #eaf4ff); }
+  .lp-section-head { text-align: center; max-width: 640px; margin: 0 auto 2.5rem; }
+  .lp-eyebrow { color: var(--color-primary, #0b5fa5); font-weight: 700; font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; }
+  .lp-section-head h2 { font-size: clamp(1.6rem, 3vw, 2.1rem); margin: 0.4rem 0 0.6rem; color: var(--color-text, #1b2733); }
+  .lp-section-head p { color: var(--color-muted, #5b6b7a); margin: 0; }
+
+  /* Services */
+  .lp-services-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1.5rem; }
+  .lp-service-card {
+    background: #fff; border: 1px solid var(--color-border, #d7e4f0); border-radius: 0.75rem;
+    padding: 1.75rem; text-align: left;
+  }
+  .lp-service-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--color-bg, #eaf4ff); color: var(--color-primary, #0b5fa5); margin-bottom: 1rem;
+  }
+  .lp-service-card h3 { margin: 0 0 0.5rem; font-size: 1.1rem; color: var(--color-text, #1b2733); }
+  .lp-service-card p { margin: 0; color: var(--color-muted, #5b6b7a); font-size: 0.92rem; }
+
+  /* How it works */
+  .lp-steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.75rem; }
+  .lp-step { text-align: center; }
+  .lp-step-number {
+    width: 42px; height: 42px; border-radius: 50%; background: var(--color-primary, #0b5fa5); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-weight: 800; margin: 0 auto 1rem;
+  }
+  .lp-step h3 { margin: 0 0 0.4rem; font-size: 1.05rem; color: var(--color-text, #1b2733); }
+  .lp-step p { margin: 0; color: var(--color-muted, #5b6b7a); font-size: 0.9rem; }
+
+  /* Asset grid (gallery) */
+  .lp-asset-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; }
+  .lp-asset-grid-item { border-radius: 0.6rem; overflow: hidden; background: var(--color-bg, #eaf4ff); }
+  .lp-asset { display: block; width: 100%; }
+  .lp-asset-image, .lp-asset-video { height: 100%; object-fit: cover; }
+  .lp-asset-video-wrap, .lp-asset-pdf-wrap { position: relative; width: 100%; padding-top: 56.25%; }
+  .lp-asset-video-wrap .lp-asset, .lp-asset-pdf-wrap .lp-asset {
+    position: absolute; inset: 0; width: 100%; height: 100%; border: none;
+  }
+  .lp-asset-link { display: inline-block; padding: 0.6rem 1rem; }
+
+  /* Testimonials */
+  .lp-testimonial-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem; }
+  .lp-testimonial-card {
+    background: #fff; border: 1px solid var(--color-border, #d7e4f0); border-radius: 0.75rem; padding: 1.75rem;
+  }
+  .lp-stars { color: var(--lp-accent); display: flex; gap: 0.15rem; margin-bottom: 0.75rem; }
+  .lp-testimonial-card blockquote { margin: 0 0 1rem; color: var(--color-text, #1b2733); font-size: 0.98rem; line-height: 1.5; }
+  .lp-testimonial-name { font-weight: 700; font-size: 0.9rem; color: var(--color-text, #1b2733); }
+  .lp-testimonial-location { font-size: 0.82rem; color: var(--color-muted, #5b6b7a); }
+
+  /* FAQ */
+  .lp-faq-list { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 0.75rem; }
+  .lp-faq-item { border: 1px solid var(--color-border, #d7e4f0); border-radius: 0.6rem; padding: 0.3rem 1.1rem; }
+  .lp-faq-item summary {
+    cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between;
+    padding: 0.9rem 0; font-weight: 600; color: var(--color-text, #1b2733);
+  }
+  .lp-faq-item summary::-webkit-details-marker { display: none; }
+  .lp-faq-item .lp-chevron { transition: transform 0.15s ease; color: var(--color-primary, #0b5fa5); flex-shrink: 0; }
+  .lp-faq-item[open] .lp-chevron { transform: rotate(180deg); }
+  .lp-faq-item p { margin: 0 0 1rem; color: var(--color-muted, #5b6b7a); font-size: 0.92rem; }
+
+  /* CTA banner */
+  .lp-cta-banner {
+    background: var(--color-primary, #0b5fa5); color: #fff; text-align: center; padding: 3.5rem 1.25rem;
+  }
+  .lp-cta-banner h2 { margin: 0 0 0.6rem; font-size: clamp(1.5rem, 3vw, 2rem); }
+  .lp-cta-banner p { margin: 0 0 1.5rem; opacity: 0.9; }
+
+  /* Footer */
+  .lp-footer { background: #11202f; color: #cfd9e3; padding: 3rem 1.25rem 1.5rem; }
+  .lp-footer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 2rem; margin-bottom: 2rem; }
+  .lp-footer-brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 800; color: #fff; margin-bottom: 0.75rem; }
+  .lp-footer h4 { color: #fff; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 0.9rem; }
+  .lp-footer ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+  .lp-footer a, .lp-footer button.lp-nav-link { color: #cfd9e3; text-decoration: none; font: inherit; background: none; border: none; cursor: pointer; padding: 0; text-align: left; }
+  .lp-footer a:hover, .lp-footer button.lp-nav-link:hover { color: #fff; }
+  .lp-footer-social { display: flex; gap: 0.75rem; margin-top: 0.75rem; }
+  .lp-footer-social a { display: inline-flex; color: #cfd9e3; }
+  .lp-footer-social a:hover { color: #fff; }
+  .lp-footer-bottom { border-top: 1px solid rgba(255,255,255,0.12); padding-top: 1.25rem; font-size: 0.82rem; color: #93a3b3; text-align: center; }
+
+  @media (max-width: 760px) {
+    .lp-nav { position: absolute; top: 100%; left: 0; right: 0; background: #fff; flex-direction: column; align-items: stretch; gap: 0; padding: 0.5rem 1.25rem; border-bottom: 1px solid var(--color-border, #d7e4f0); display: none; }
+    .lp-nav.is-open { display: flex; }
+    .lp-nav a, .lp-nav button.lp-nav-link { padding: 0.75rem 0; border-bottom: 1px solid var(--color-border, #d7e4f0); }
+    .lp-nav-toggle { display: inline-flex; }
+    .lp-masthead { position: relative; }
+    .lp-masthead-cta { display: inline-flex; justify-content: center; margin: 0.75rem 0; border-bottom: none; }
+  }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  var API_BASE_URL = window.APP_CONFIG.API_BASE_URL;
+  var root = document.getElementById('lp-root');
+  if (!root) return;
+
+  function escapeAttr(value) {
+    return String(value == null ? '' : value).replace(/"/g, '&quot;');
+  }
+
+  function renderAssetEmbed(asset) {
+    if (!asset) return '';
+    switch (asset.type) {
+      case 'image':
+        return '<img class="lp-asset lp-asset-image" src="' + escapeAttr(asset.resolvedUrl) + '" loading="lazy" alt="">';
+      case 'video':
+        return '<video class="lp-asset lp-asset-video" controls playsinline src="' + escapeAttr(asset.resolvedUrl) + '"></video>';
+      case 'youtube':
+        return '<div class="lp-asset-video-wrap"><iframe class="lp-asset lp-asset-video" src="' + escapeAttr(asset.resolvedUrl) + '" title="Video" loading="lazy" ' +
+          'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>';
+      case 'pdf':
+        return '<div class="lp-asset-pdf-wrap"><iframe class="lp-asset lp-asset-pdf" src="' + escapeAttr(asset.resolvedUrl) + '" loading="lazy"></iframe></div>';
+      case 'audio':
+        return '<audio class="lp-asset lp-asset-audio" controls src="' + escapeAttr(asset.resolvedUrl) + '"></audio>';
+      default:
+        return '<a class="lp-asset-link" href="' + escapeAttr(asset.resolvedUrl) + '" target="_blank" rel="noopener">View attachment</a>';
+    }
+  }
+
+  function renderAssetGrid(assets) {
+    if (!assets || !assets.length) return '';
+    return '<div class="lp-asset-grid">' + assets.map(function (asset) {
+      return '<div class="lp-asset-grid-item">' + renderAssetEmbed(asset) + '</div>';
+    }).join('') + '</div>';
+  }
+
+  function applyAssetPlaceholders(content, assets) {
+    assets = assets || [];
+    return String(content || '')
+      .replace(/\{\{assets:grid\}\}/g, function () { return renderAssetGrid(assets); })
+      .replace(/\{\{assetUrl:(\d+)\}\}/g, function (match, idx) {
+        var asset = assets[Number(idx)];
+        return asset ? asset.resolvedUrl : '';
+      })
+      .replace(/\{\{asset:(\d+)\}\}/g, function (match, idx) {
+        return renderAssetEmbed(assets[Number(idx)]);
+      });
+  }
+
+  /** Re-executes <script> tags inside dynamically-injected HTML (innerHTML
+   * does not run them on its own) - mirrors assets/js/app.js's handling of
+   * module content, needed here too since this content is injected by this
+   * module's own script rather than the outer app shell. */
+  function executeEmbeddedScripts(container) {
+    container.querySelectorAll('script').forEach(function (oldScript) {
+      var newScript = document.createElement('script');
+      Array.prototype.forEach.call(oldScript.attributes, function (attr) {
+        newScript.setAttribute(attr.name, attr.value);
+      });
+      newScript.textContent = oldScript.textContent;
+      oldScript.replaceWith(newScript);
+    });
+  }
+
+  /** In-page section links use data-scroll-to (not href="#id") so they
+   * don't collide with the app's own #hash module router. */
+  function wireSmoothScrollNav(container) {
+    container.querySelectorAll('[data-scroll-to]').forEach(function (el) {
+      el.addEventListener('click', function (event) {
+        var target = document.getElementById(el.getAttribute('data-scroll-to'));
+        if (!target) return;
+        event.preventDefault();
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        container.querySelectorAll('.lp-nav.is-open').forEach(function (nav) { nav.classList.remove('is-open'); });
+      });
+    });
+    container.querySelectorAll('.lp-nav-toggle').forEach(function (toggle) {
+      toggle.addEventListener('click', function () {
+        var nav = container.querySelector('.lp-nav');
+        if (nav) nav.classList.toggle('is-open');
+      });
+    });
+  }
+
+  function renderError() {
+    root.innerHTML =
+      '<div class="lp-error"><h1>Unable to load page content</h1>' +
+      '<p>Please check your connection and try again shortly.</p></div>';
+  }
+
+  function init() {
+    fetch(API_BASE_URL + '/?view=landing')
+      .then(function (response) {
+        if (!response.ok) throw new Error('Backend responded with ' + response.status);
+        return response.json();
+      })
+      .then(function (data) {
+        if (!data.ok) throw new Error(data.error || 'Unknown backend error');
+        var html = (data.sections || []).map(function (section) {
+          return applyAssetPlaceholders(section.content, section.assets);
+        }).join('\n');
+        root.innerHTML = html;
+        executeEmbeddedScripts(root);
+        wireSmoothScrollNav(root);
+      })
+      .catch(function (err) {
+        console.error(err);
+        renderError();
+      });
+  }
+
+  init();
+})();
+</script>

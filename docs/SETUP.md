@@ -28,6 +28,11 @@ row; add any columns you like, but these are recognized by the app:
 A second tab named **`Submissions`** is created automatically the first time
 a form is submitted - you don't need to create it yourself.
 
+A third tab named **`landing page`** (columns: `section`, `content`,
+`assets`) is used specifically to build the `home` module from composable
+sections instead of a single `html` cell - see "Section-based home page"
+below.
+
 ## 2. Deploy the Apps Script backend
 
 1. Open the Sheet, then **Extensions > Apps Script**. This creates a script
@@ -144,6 +149,57 @@ questions, optional Previous/Next). To use it:
    `<script>` - each entry is either `type: 'choice'` / `'icon-choice'`
    (single-select, auto-advances) or `type: 'input'` (one or more text
    fields with a `validate(value)` function, requires clicking Next/Enter).
+
+## Section-based home page (the "landing page" tab)
+
+The home page is built from a **second** sheet tab named **`landing page`**
+(columns: `section`, `content`, `assets`) instead of a single `html` cell -
+each row renders one section of the page (masthead, hero, services,
+footer, etc.), concatenated top to bottom in row order. This lets you
+reorder, add, or remove whole sections of the home page just by
+reordering/adding/deleting sheet rows.
+
+- `section` - a label for your own reference; it has no effect on rendering.
+- `content` - plain HTML for that section.
+- `assets` - a JSON array of media URLs for that row (Drive share links,
+  YouTube links, or direct image/video/pdf/audio URLs). Each one is
+  auto-resolved server-side (in `Code.gs`) into a usable embed - Drive links
+  are even checked against their real Google Drive mime type, so an
+  image/video/PDF in Drive embeds correctly regardless of the link format
+  you paste in.
+
+A row's `content` can reference its own `assets` with:
+- `{{asset:0}}` - a fully-rendered embed tag (`<img>`/`<video>`/`<iframe>`/
+  `<audio>`, whichever fits the detected type) for `assets[0]`
+- `{{assetUrl:0}}` - just the resolved URL for `assets[0]`, for custom
+  markup (e.g. a CSS `background-image`)
+- `{{assets:grid}}` - renders **every** asset in that row as a responsive
+  grid, regardless of how many there are (handy for a photo gallery row)
+
+### Setup
+
+1. Create the `landing page` tab with those 3 columns.
+2. Paste each row's `content`/`assets` from
+   [`docs/modules/landing-page-rows.md`](/docs/modules/landing-page-rows.md)
+   (a ready-made, generic gutter-company page: masthead, hero, trust bar,
+   services, how-it-works, gallery, testimonials, FAQ, CTA banner, footer) -
+   or write your own rows following the same pattern.
+3. Paste the entire contents of
+   [`docs/modules/home.html`](/docs/modules/home.html) into the `html`
+   column of the `Modules` row with `module = home`. This is the shared
+   bootstrap: it fetches the `landing page` tab, resolves placeholders, and
+   assembles/styles the page - you only need to touch it if you want to
+   change the shared CSS framework (`.lp-*` classes) or how placeholders
+   are resolved.
+4. Replace the placeholder stock-photo URLs in the Hero/Gallery rows'
+   `assets` with your own (e.g. links into your Drive assets folder).
+
+In-page navigation (masthead/footer links to other sections, like
+"Services" or "FAQ") uses `data-scroll-to="target-id"` + smooth-scrolling,
+**not** `href="#target-id"` - the app's router already treats any `#hash`
+change as "go to this module", so a plain in-page anchor link would be
+misread as navigating to a (nonexistent) module. Links that should actually
+change pages, like "Get a Free Quote", still use a normal `href="#rfq"`.
 
 ## 7. PWA install
 
