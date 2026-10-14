@@ -20,7 +20,11 @@ that row, rendered as a responsive grid) - see comments at the top of
 The logo, phone number, "Get a Free Quote", and "Login" buttons are fixed,
 static markup in `index.html` (not sheet-driven). The **Masthead** row
 below is just the in-page menu bar that renders at the top of the page
-body - add/remove/reorder its links here without touching code.
+body - add/remove/reorder its links here without touching code. It's
+fully self-contained (its own `<style>`/`<script>`), fixed in position
+right below the shell header (measured dynamically, so it still lines up
+correctly if the header's height changes, e.g. wrapping on narrow
+screens), with a spacer so it doesn't overlap the Hero section under it.
 
 ---
 
@@ -28,14 +32,58 @@ body - add/remove/reorder its links here without touching code.
 
 **content:**
 ```html
-<nav class="lp-menu-bar">
-  <div class="lp-menu-bar-inner lp-container">
-    <button type="button" class="lp-nav-link" data-scroll-to="lp-services">Services</button>
-    <button type="button" class="lp-nav-link" data-scroll-to="lp-how-it-works">How It Works</button>
-    <button type="button" class="lp-nav-link" data-scroll-to="lp-testimonials">Reviews</button>
-    <button type="button" class="lp-nav-link" data-scroll-to="lp-faq">FAQ</button>
-  </div>
-</nav>
+<div class="rg-menu-spacer" id="rg-menu-spacer"></div>
+<div class="rg-menu-bar" id="rg-menu-bar">
+  <button type="button" class="rg-menu-link" data-scroll-to="lp-services">Services</button>
+  <button type="button" class="rg-menu-link" data-scroll-to="lp-how-it-works">How It Works</button>
+  <button type="button" class="rg-menu-link" data-scroll-to="lp-testimonials">Reviews</button>
+  <button type="button" class="rg-menu-link" data-scroll-to="lp-faq">FAQ</button>
+</div>
+
+<style>
+  .rg-menu-bar {
+    position: fixed;
+    top: 64px;
+    left: 0;
+    right: 0;
+    z-index: 25;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0.55rem 1rem;
+  }
+  .rg-menu-link {
+    background: none;
+    border: none;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #475569;
+    cursor: pointer;
+    padding: 0;
+  }
+  .rg-menu-link:hover { color: #0b5fa5; }
+</style>
+
+<script>
+(function () {
+  var bar = document.getElementById('rg-menu-bar');
+  var spacer = document.getElementById('rg-menu-spacer');
+  if (!bar || !spacer) return;
+
+  function layout() {
+    var header = document.getElementById('site-header');
+    bar.style.top = (header ? header.offsetHeight : 0) + 'px';
+    spacer.style.height = bar.offsetHeight + 'px';
+  }
+
+  layout();
+  window.addEventListener('resize', layout);
+})();
+</script>
 ```
 
 **assets:** `[]`
