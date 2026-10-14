@@ -14,7 +14,7 @@
     DEFAULT_MODULE: 'home',
 
     // Cache names/versions - bump these to force clients to drop old caches.
-    SHELL_CACHE: 'rainguard-shell-v1',
-    API_CACHE: 'rainguard-api-v1'
+    SHELL_CACHE: 'rainguard-shell-v2',
+    API_CACHE: 'rainguard-api-v2'
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

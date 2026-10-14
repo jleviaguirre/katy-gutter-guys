@@ -53,10 +53,7 @@ async function handleGet(request, env, ctx, corsHeaders) {
 
   const cached = await cache.match(cacheKey);
   if (cached) {
-    const response = new Response(cached.body, cached);
-    applyCorsHeaders(response.headers, corsHeaders);
-    response.headers.set('X-Cache', 'HIT');
-    return response;
+    return clientResponse(cached, 'HIT', corsHeaders);
   }
 
   const incoming = new URL(request.url);
@@ -66,20 +63,32 @@ async function handleGet(request, env, ctx, corsHeaders) {
   const upstream = await fetch(target.toString(), { method: 'GET', redirect: 'follow' });
   const bodyText = await upstream.text();
 
+  // This Cache-Control is only for Cloudflare's edge cache (cache.put below
+  // reads it to determine TTL) - it is intentionally NOT sent to the browser
+  // (see clientResponse) so the browser/service worker don't add yet another
+  // independent caching layer on top of the edge cache.
   const ttl = Number(env.CACHE_TTL_SECONDS || 300);
-  const response = new Response(bodyText, {
+  const edgeResponse = new Response(bodyText, {
     status: upstream.status,
     headers: {
       'Content-Type': 'application/json;charset=UTF-8',
-      'Cache-Control': `public, max-age=${ttl}`,
-      'X-Cache': 'MISS'
+      'Cache-Control': `public, max-age=${ttl}`
     }
   });
 
   if (upstream.ok) {
-    ctx.waitUntil(cache.put(cacheKey, response.clone()));
+    ctx.waitUntil(cache.put(cacheKey, edgeResponse.clone()));
   }
 
+  return clientResponse(edgeResponse, 'MISS', corsHeaders);
+}
+
+/** Builds the response actually sent to the browser: no independent
+ * browser-side HTTP caching (that's the edge cache's job), CORS applied. */
+function clientResponse(sourceResponse, cacheStatus, corsHeaders) {
+  const response = new Response(sourceResponse.body, sourceResponse);
+  response.headers.set('Cache-Control', 'no-store');
+  response.headers.set('X-Cache', cacheStatus);
   applyCorsHeaders(response.headers, corsHeaders);
   return response;
 }

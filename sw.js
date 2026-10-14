@@ -7,6 +7,12 @@
  *   renders the last known content immediately while refreshing it in the
  *   background. Falls back to cache alone when offline.
  */
+// Bump this whenever a fix means previously-cached responses must be
+// discarded (the browser only re-checks this file's own bytes for updates,
+// not imported scripts, so cache-name bumps alone in config.js won't trigger
+// an update without a change here too).
+var SW_BUILD = 2;
+
 importScripts('./config.js');
 
 var SHELL_CACHE = self.APP_CONFIG.SHELL_CACHE;
@@ -77,7 +83,9 @@ function staleWhileRevalidate(request) {
     return cache.match(request).then(function (cached) {
       var networkFetch = fetch(request)
         .then(function (response) {
-          cache.put(request, response.clone());
+          if (response.ok) {
+            cache.put(request, response.clone()); // never cache error responses
+          }
           return response;
         })
         .catch(function () {

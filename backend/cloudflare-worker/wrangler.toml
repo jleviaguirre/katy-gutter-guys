@@ -15,7 +15,7 @@ compatibility_date = "2024-11-01"
 # it down for production.
 ALLOWED_ORIGIN = "https://kgg.kamarble.com"
 
-CACHE_TTL_SECONDS = "300"
+CACHE_TTL_SECONDS = "1" # dev-only: effectively disables edge caching for fast iteration; raise back up (e.g. 60-300) once content testing is done
 RATE_LIMIT_MAX_REQUESTS = "20"
 RATE_LIMIT_WINDOW_SEC = "60"
 
