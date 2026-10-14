@@ -23,6 +23,10 @@
     <span class="rfq-success-icon"></span>
     <h2>Thanks! Your request is in.</h2>
     <p>A RainGuard specialist will reach out shortly with your free quote.</p>
+    <a class="rfq-btn rfq-btn-primary rfq-success-home" href="#home">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-5h6v5"/></svg>
+      Back to Home
+    </a>
   </div>
 </section>
 
@@ -41,8 +45,11 @@
   .rfq-step-count { font-size: 0.8rem; color: var(--color-muted, #5b6b7a); white-space: nowrap; }
   .rfq-progress { flex: 1; height: 6px; background: var(--color-bg, #eaf4ff); border-radius: 999px; overflow: hidden; }
   .rfq-progress-bar { height: 100%; width: 0%; background: var(--color-primary, #0b5fa5); transition: width 0.3s ease; }
-  .rfq-question { animation: rfq-fade-in 0.25s ease; min-height: 180px; }
-  @keyframes rfq-fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .rfq-question { position: relative; overflow: hidden; min-height: 180px; }
+  .rfq-question.rfq-anim-forward { animation: rfq-slide-in-right 0.32s ease; }
+  .rfq-question.rfq-anim-back { animation: rfq-slide-in-left 0.32s ease; }
+  @keyframes rfq-slide-in-right { from { opacity: 0; transform: translateX(36px); } to { opacity: 1; transform: translateX(0); } }
+  @keyframes rfq-slide-in-left { from { opacity: 0; transform: translateX(-36px); } to { opacity: 1; transform: translateX(0); } }
   .rfq-title { margin: 0 0 1rem; font-size: 1.25rem; color: var(--color-text, #1b2733); }
   .rfq-options { display: grid; gap: 0.75rem; }
   .rfq-options--plain { grid-template-columns: 1fr; }
@@ -104,6 +111,7 @@
   @keyframes rfq-spin { to { transform: rotate(360deg); } }
   .rfq-success { max-width: 560px; margin: 2rem auto; text-align: center; color: var(--color-text, #1b2733); }
   .rfq-success-icon { display: inline-flex; color: var(--color-primary, #0b5fa5); margin-bottom: 1rem; }
+  .rfq-success-home { margin-top: 1.5rem; text-decoration: none; }
   @media (max-width: 480px) {
     .rfq-card { padding: 1.1rem; border-radius: 0.5rem; }
     .rfq-options--icons { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
@@ -152,6 +160,14 @@
     'Gutters & gutter guards': '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M4 9.5v3.5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9.5"/><rect x="3" y="6.5" width="18" height="3.5" rx="1"/><path d="M7 6.5v3.5M11 6.5v3.5M15 6.5v3.5M19 6.5v3.5" stroke-width="0.9"/></svg>'
   };
 
+  // "Where are you in the planning process?" icons: progress check,
+  // magnifying glass (researching), and info (gathering information).
+  var PLANNING_ICONS = {
+    'Ready to move forward': '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 13l2.3-2.3L12.7 13l3.3-3.8"/><path d="M16.5 8.6h2.5v2.5"/></svg>',
+    'Researching options': '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.3-4.3"/></svg>',
+    'Just gathering information': '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="7.6" r="0.9" fill="currentColor" stroke="none"/></svg>'
+  };
+
   var YES_NO = [
     { value: 'Yes', label: 'Yes', icon: ICONS.check },
     { value: 'No', label: 'No', icon: ICONS.cross }
@@ -184,10 +200,10 @@
     { id: 'existingGutters', type: 'choice', title: 'Do you have existing gutters?', options: YES_NO },
     { id: 'oldGuardsRemoval', type: 'choice', title: 'Do you have old gutter guards that need to be removed?', options: YES_NO },
     { id: 'treesNearby', type: 'choice', title: 'Do you have trees near your home?', options: YES_NO },
-    { id: 'planningStage', type: 'choice', title: 'Where are you in the planning process?', options: [
-      { value: 'Ready to move forward', label: 'Ready to move forward' },
-      { value: 'Researching options', label: 'Researching my options' },
-      { value: 'Just gathering information', label: 'Just gathering information' }
+    { id: 'planningStage', type: 'icon-choice', title: 'Where are you in the planning process?', options: [
+      { value: 'Ready to move forward', label: 'Ready to move forward', icon: PLANNING_ICONS['Ready to move forward'] },
+      { value: 'Researching options', label: 'Researching my options', icon: PLANNING_ICONS['Researching options'] },
+      { value: 'Just gathering information', label: 'Just gathering information', icon: PLANNING_ICONS['Just gathering information'] }
     ] },
     { id: 'discountEligible', type: 'choice', title: 'Does anyone in your household qualify for a senior or military discount?', options: YES_NO },
     { id: 'zip', type: 'input', title: 'What is your ZIP code?', fields: [
@@ -246,13 +262,18 @@
     return div.innerHTML;
   }
 
-  function render() {
+  function render(direction) {
     var q = currentQuestion();
     stepCountEl.textContent = 'Step ' + (index + 1) + ' of ' + QUESTIONS.length;
     progressBarEl.style.width = Math.round((index / QUESTIONS.length) * 100) + '%';
     formErrorEl.hidden = true;
     prevBtn.disabled = index === 0;
     prevBtn.style.visibility = index === 0 ? 'hidden' : 'visible';
+
+    // Reset then force a reflow so the slide animation reliably restarts
+    // even when moving in the same direction two steps in a row.
+    questionEl.classList.remove('rfq-anim-forward', 'rfq-anim-back');
+    void questionEl.offsetWidth;
 
     if (q.type === 'input') {
       questionEl.innerHTML =
@@ -317,6 +338,9 @@
       });
     }
 
+    if (direction === 'forward') questionEl.classList.add('rfq-anim-forward');
+    else if (direction === 'back') questionEl.classList.add('rfq-anim-back');
+
     updateNextState();
   }
 
@@ -338,13 +362,13 @@
       return;
     }
     index += 1;
-    render();
+    render('forward');
   }
 
   function goPrev() {
     if (submitting || index === 0) return;
     index -= 1;
-    render();
+    render('back');
   }
 
   function submit() {
