@@ -1,7 +1,7 @@
 {
-  "name": "RainGuard",
-  "short_name": "RainGuard",
-  "description": "RainGuard - content-driven PWA powered by Google Sheets",
+  "name": "Gutter Guys of Katy",
+  "short_name": "Gutter Guys",
+  "description": "Gutter Guys of Katy - content-driven PWA powered by Google Sheets",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

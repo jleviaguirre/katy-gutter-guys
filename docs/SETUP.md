@@ -1,6 +1,6 @@
-# RainGuard setup guide
+# Gutter Guys of Katy setup guide
 
-RainGuard is a static PWA shell (hosted on GitHub Pages) whose page content
+Gutter Guys of Katy is a static PWA shell (hosted on GitHub Pages) whose page content
 lives entirely in a Google Sheet. A Cloudflare Worker proxies/caches requests
 between the browser and a Google Apps Script backend, which reads/writes the
 Sheet (and optionally Google Drive for file uploads).

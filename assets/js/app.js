@@ -1,5 +1,5 @@
 /**
- * RainGuard - app shell logic
+ * Gutter Guys of Katy - app shell logic
  * ---------------------------------------------------------------------------
  * Fetches page content (modules) from the Cloudflare Worker, renders a hash
  * router over them, executes any <script> tags embedded in that content
@@ -92,7 +92,7 @@ function renderCurrentRoute() {
     return;
   }
 
-  document.title = row.title ? `RainGuard - ${row.title}` : 'RainGuard';
+  document.title = row.title ? `Gutter Guys of Katy - ${row.title}` : 'Gutter Guys of Katy';
   appEl.innerHTML = row.html || '';
   executeEmbeddedScripts(appEl);
   highlightActiveNav();

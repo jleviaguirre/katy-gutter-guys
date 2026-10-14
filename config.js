@@ -1,5 +1,5 @@
 /**
- * RainGuard - runtime configuration
+ * Gutter Guys of Katy - runtime configuration
  * Edit API_BASE_URL after deploying the Cloudflare Worker (see
  * /backend/cloudflare-worker). Loaded both by the page (as window.APP_CONFIG)
  * and by the service worker (via importScripts, as self.APP_CONFIG) because

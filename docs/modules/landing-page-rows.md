@@ -26,7 +26,7 @@ that row, rendered as a responsive grid) - see comments at the top of
 <header class="lp-masthead" id="masthead">
   <a class="lp-masthead-brand" href="#home">
     <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-5h6v5"/></svg>
-    RainGuard
+    Gutter Guys of Katy
   </a>
   <nav class="lp-nav" id="lp-primary-nav">
     <button type="button" class="lp-nav-link" data-scroll-to="lp-services">Services</button>
@@ -52,7 +52,7 @@ that row, rendered as a responsive grid) - see comments at the top of
 <section class="lp-hero" id="lp-hero" style="background-image: url('{{assetUrl:0}}');">
   <div class="lp-container lp-hero-inner">
     <h1>Protect Your Home From Clogged Gutters, For Good.</h1>
-    <p>RainGuard installs premium gutter guards and seamless gutters that keep debris out and water flowing - backed by a lifetime warranty and a free, no-pressure inspection.</p>
+    <p>Gutter Guys of Katy installs premium gutter guards and seamless gutters that keep debris out and water flowing - backed by a lifetime warranty and a free, no-pressure inspection.</p>
     <div class="lp-hero-ctas">
       <a class="lp-btn lp-btn-primary" href="#rfq">Get My Free Quote</a>
       <button type="button" class="lp-btn lp-btn-outline" data-scroll-to="lp-how-it-works">See How It Works</button>
@@ -160,7 +160,7 @@ that row, rendered as a responsive grid) - see comments at the top of
   <div class="lp-container">
     <div class="lp-section-head">
       <div class="lp-eyebrow">Recent Work</div>
-      <h2>See the RainGuard Difference</h2>
+      <h2>See the Gutter Guys of Katy Difference</h2>
       <p>A few recent installs from homes just like yours.</p>
     </div>
     {{assets:grid}}
@@ -193,7 +193,7 @@ that row, rendered as a responsive grid) - see comments at the top of
     <div class="lp-testimonial-grid">
       <div class="lp-testimonial-card">
         <div class="lp-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-        <blockquote>"Haven't cleaned my gutters once since RainGuard installed their guards two years ago. Worth every penny."</blockquote>
+        <blockquote>"Haven't cleaned my gutters once since Gutter Guys of Katy installed their guards two years ago. Worth every penny."</blockquote>
         <div class="lp-testimonial-name">Daniel R.</div>
         <div class="lp-testimonial-location">Katy, TX</div>
       </div>
@@ -205,7 +205,7 @@ that row, rendered as a responsive grid) - see comments at the top of
       </div>
       <div class="lp-testimonial-card">
         <div class="lp-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-        <blockquote>"After a bad storm took out our old gutters, RainGuard had new seamless gutters up within a week."</blockquote>
+        <blockquote>"After a bad storm took out our old gutters, Gutter Guys of Katy had new seamless gutters up within a week."</blockquote>
         <div class="lp-testimonial-name">Tom K.</div>
         <div class="lp-testimonial-location">Sugar Land, TX</div>
       </div>
@@ -281,7 +281,7 @@ that row, rendered as a responsive grid) - see comments at the top of
       <div>
         <div class="lp-footer-brand">
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-5h6v5"/></svg>
-          RainGuard
+          Gutter Guys of Katy
         </div>
         <p>Gutter guards, seamless gutters, repairs, and cleaning - backed by a lifetime warranty.</p>
         <div class="lp-footer-social">
@@ -303,11 +303,11 @@ that row, rendered as a responsive grid) - see comments at the top of
         <ul>
           <li><a href="#rfq">Get a Free Quote</a></li>
           <li><a href="tel:+18005551234">(800) 555-1234</a></li>
-          <li><a href="mailto:hello@rainguard.example">hello@rainguard.example</a></li>
+          <li><a href="mailto:hello@gutterguysofkaty.example">hello@gutterguysofkaty.example</a></li>
         </ul>
       </div>
     </div>
-    <div class="lp-footer-bottom">&copy; <span id="lp-footer-year"></span> RainGuard. All rights reserved.</div>
+    <div class="lp-footer-bottom">&copy; <span id="lp-footer-year"></span> Gutter Guys of Katy. All rights reserved.</div>
   </div>
 </footer>
 <script>document.getElementById('lp-footer-year').textContent = new Date().getFullYear();</script>

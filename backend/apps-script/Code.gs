@@ -1,5 +1,5 @@
 /**
- * RainGuard - Google Apps Script backend
+ * Gutter Guys of Katy - Google Apps Script backend
  * ---------------------------------------------------------------------------
  * Serves page content stored in a Google Sheet ("Modules" tab: module, html,
  * title, navLabel, order, showInNav - any extra columns are passed through

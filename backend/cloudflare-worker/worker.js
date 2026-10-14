@@ -1,5 +1,5 @@
 /**
- * RainGuard - Cloudflare Worker proxy
+ * Gutter Guys of Katy - Cloudflare Worker proxy
  * ---------------------------------------------------------------------------
  * Sits between the public GitHub Pages site and the Google Apps Script
  * backend. Responsibilities:

@@ -1,5 +1,5 @@
 /**
- * RainGuard - service worker
+ * Gutter Guys of Katy - service worker
  * ---------------------------------------------------------------------------
  * - App shell (HTML/CSS/JS/manifest/icons): cache-first, so the shell loads
  *   instantly and works offline.

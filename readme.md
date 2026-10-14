@@ -1,4 +1,4 @@
-# RainGuard
+# Gutter Guys of Katy
 
 A low-traffic PWA whose page content is authored in a Google Sheet instead
 of being hardcoded in this repo. This repository hosts only the generic,
