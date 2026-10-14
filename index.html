@@ -40,8 +40,42 @@
   <div id="toast" class="toast" role="status" hidden></div>
 
   <footer id="site-footer">
-    <p>&copy; <span id="year"></span> Gutter Guys of Katy</p>
-  </footer>
+<footer class="lp-footer">
+  <div class="lp-container">
+    <div class="lp-footer-grid">
+      <div>
+        <div class="lp-footer-brand">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-5h6v5"/></svg>
+          Gutter Guys of Katy
+        </div>
+        <p>Gutter guards, seamless gutters, repairs, and cleaning - backed by a lifetime warranty.</p>
+        <div class="lp-footer-social">
+          <a href="#" aria-label="Facebook"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V7a2 2 0 0 1 2-2h2V2h-3a5 5 0 0 0-5 5v2H8v3h2v9h4v-9h3l1-3h-4z"/></svg></a>
+          <a href="#" aria-label="Instagram"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg></a>
+        </div>
+      </div>
+      <div>
+        <h4>Company</h4>
+        <ul>
+          <li><button type="button" class="lp-nav-link" data-scroll-to="lp-services">Services</button></li>
+          <li><button type="button" class="lp-nav-link" data-scroll-to="lp-how-it-works">How It Works</button></li>
+          <li><button type="button" class="lp-nav-link" data-scroll-to="lp-testimonials">Reviews</button></li>
+          <li><button type="button" class="lp-nav-link" data-scroll-to="lp-faq">FAQ</button></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Get Started</h4>
+        <ul>
+          <li><a href="#rfq">Get a Free Quote</a></li>
+          <li><a href="tel:+18005551234">(800) 555-1234</a></li>
+          <li><a href="mailto:hello@gutterguysofkaty.example">hello@gutterguysofkaty.example</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="lp-footer-bottom">&copy; <span id="lp-footer-year"></span> Gutter Guys of Katy. All rights reserved.</div>
+  </div>
+</footer>
+<script>document.getElementById('lp-footer-year').textContent = new Date().getFullYear();</script>  </footer>
 
   <script src="config.js"></script>
   <script type="module" src="assets/js/app.js"></script>
