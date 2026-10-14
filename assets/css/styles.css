@@ -18,53 +18,11 @@ body {
   background: #ffffff;
 }
 
-#site-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.75rem 1.25rem;
-  background: var(--color-primary);
-  color: #ffffff;
-  flex-wrap: wrap;
-}
-
-#site-header .brand {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: #ffffff;
-  text-decoration: none;
-}
-
-#site-nav {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-#site-nav a {
-  color: #ffffff;
-  text-decoration: none;
-  opacity: 0.85;
-  padding: 0.25rem 0.1rem;
-  border-bottom: 2px solid transparent;
-}
-
-#site-nav a:hover,
-#site-nav a:focus-visible {
-  opacity: 1;
-}
-
-#site-nav a[aria-current="page"] {
-  opacity: 1;
-  border-bottom-color: #ffffff;
-}
-
 #app {
   flex: 1;
   width: min(960px, 100%);
   margin: 0 auto;
-  padding: 1.5rem 1.25rem 3rem;
+  /* padding: 1.5rem 1.25rem 3rem; */
 }
 
 #site-footer {

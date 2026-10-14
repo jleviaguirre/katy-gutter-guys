@@ -11,12 +11,10 @@
 const { API_BASE_URL, DEFAULT_MODULE } = window.APP_CONFIG;
 
 const appEl = document.getElementById('app');
-const navEl = document.getElementById('site-nav');
 const toastEl = document.getElementById('toast');
 
 /** module name (lowercase) -> module row from the sheet */
 let modulesByKey = new Map();
-let orderedModules = [];
 
 init();
 
@@ -28,7 +26,6 @@ async function init() {
   try {
     const modules = await fetchModules();
     indexModules(modules);
-    renderNav();
     window.addEventListener('hashchange', renderCurrentRoute);
     renderCurrentRoute();
   } catch (err) {
@@ -49,32 +46,9 @@ async function fetchModules() {
 }
 
 function indexModules(modules) {
-  orderedModules = modules.slice().sort((a, b) => {
-    const orderA = Number(a.order ?? 0);
-    const orderB = Number(b.order ?? 0);
-    if (orderA !== orderB) return orderA - orderB;
-    return String(a.navLabel || a.module).localeCompare(String(b.navLabel || b.module));
-  });
   modulesByKey = new Map(
     modules.map((row) => [String(row.module).toLowerCase(), row])
   );
-}
-
-function renderNav() {
-  navEl.innerHTML = '';
-  orderedModules
-    .filter((row) => !isFalsy(row.showInNav))
-    .forEach((row) => {
-      const link = document.createElement('a');
-      link.href = `#${row.module}`;
-      link.textContent = row.navLabel || row.module;
-      navEl.appendChild(link);
-    });
-  highlightActiveNav();
-}
-
-function isFalsy(value) {
-  return value === false || String(value).toLowerCase() === 'false';
 }
 
 function currentModuleKey() {
@@ -88,24 +62,13 @@ function renderCurrentRoute() {
 
   if (!row) {
     renderNotFound(key);
-    highlightActiveNav();
     return;
   }
 
   document.title = row.title ? `Gutter Guys of Katy - ${row.title}` : 'Gutter Guys of Katy';
   appEl.innerHTML = row.html || '';
   executeEmbeddedScripts(appEl);
-  highlightActiveNav();
   window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
-}
-
-function highlightActiveNav() {
-  const key = currentModuleKey();
-  navEl.querySelectorAll('a').forEach((link) => {
-    const isActive = link.getAttribute('href') === `#${key}`;
-    link.toggleAttribute('aria-current', isActive);
-    if (isActive) link.setAttribute('aria-current', 'page');
-  });
 }
 
 function renderNotFound(key) {
