@@ -17,28 +17,22 @@ Placeholder syntax available in `content`: `{{asset:0}}` (full embed tag),
 that row, rendered as a responsive grid) - see comments at the top of
 `home.html` for details.
 
+The **Masthead** row is special: it's not rendered into the page body at
+all. The fixed shell header (`index.html`/`app.js`) reads this row directly
+to populate its menu, so `content` here should be just the menu links -
+no logo, CTA button, or mobile toggle (those are already fixed, static
+markup in `index.html`).
+
 ---
 
 ## Row 1 — section: `Masthead`
 
 **content:**
 ```html
-<header class="lp-masthead" id="masthead">
-  <a class="lp-masthead-brand" href="#home">
-    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-5h6v5"/></svg>
-    Gutter Guys of Katy
-  </a>
-  <nav class="lp-nav" id="lp-primary-nav">
-    <button type="button" class="lp-nav-link" data-scroll-to="lp-services">Services</button>
-    <button type="button" class="lp-nav-link" data-scroll-to="lp-how-it-works">How It Works</button>
-    <button type="button" class="lp-nav-link" data-scroll-to="lp-testimonials">Reviews</button>
-    <button type="button" class="lp-nav-link" data-scroll-to="lp-faq">FAQ</button>
-    <a class="lp-masthead-cta" href="#rfq">Get a Free Quote</a>
-  </nav>
-  <button type="button" class="lp-nav-toggle" aria-label="Toggle menu">
-    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-  </button>
-</header>
+<button type="button" class="site-menu-link" data-scroll-to="lp-services">Services</button>
+<button type="button" class="site-menu-link" data-scroll-to="lp-how-it-works">How It Works</button>
+<button type="button" class="site-menu-link" data-scroll-to="lp-testimonials">Reviews</button>
+<button type="button" class="site-menu-link" data-scroll-to="lp-faq">FAQ</button>
 ```
 
 **assets:** `[]`

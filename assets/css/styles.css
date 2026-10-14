@@ -25,6 +25,153 @@ body {
   /* padding: 1.5rem 1.25rem 3rem; */
 }
 
+/* Fixed site header - present on every page (same idea as #site-footer).
+ * The brand/phone/CTA/login pieces are static; #site-menu's contents are
+ * fetched from the landing page sheet's "Masthead" row by app.js. */
+#site-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.75rem 1.25rem;
+  background: #ffffff;
+  border-bottom: 1px solid var(--color-border);
+  flex-wrap: nowrap;
+}
+
+.site-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--color-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.site-brand svg { color: var(--color-primary); flex-shrink: 0; }
+
+.site-menu {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  flex: 1;
+}
+
+.site-menu-links {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.site-menu-link,
+.site-menu-links a {
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--color-text);
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.site-menu-link:hover,
+.site-menu-links a:hover {
+  color: var(--color-primary);
+}
+
+.site-menu-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-shrink: 0;
+}
+
+.site-phone {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--color-text);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.site-phone:hover { color: var(--color-primary); }
+
+.site-btn {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.55rem 1.05rem;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.site-btn-primary { background: var(--color-primary); color: #ffffff; }
+.site-btn-primary:hover { opacity: 0.9; }
+.site-btn-ghost { background: transparent; color: var(--color-primary); border: 1.5px solid var(--color-primary); }
+.site-btn-ghost:hover { background: var(--color-bg); }
+
+.site-menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.3rem;
+  margin-left: auto;
+  color: var(--color-text);
+}
+
+@media (max-width: 860px) {
+  .site-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border-bottom: 1px solid var(--color-border);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 0.5rem 1.25rem 1rem;
+    display: none;
+  }
+  .site-menu.is-open { display: flex; }
+  .site-menu-links {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+  .site-menu-link,
+  .site-menu-links a {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .site-menu-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
+    margin-top: 0.75rem;
+  }
+  .site-menu-actions .site-phone { justify-content: center; padding: 0.5rem 0; }
+  .site-btn { justify-content: center; }
+  #site-header { position: relative; }
+  .site-menu-toggle { display: inline-flex; }
+}
+
 #site-footer {
   text-align: center;
   padding: 1rem;

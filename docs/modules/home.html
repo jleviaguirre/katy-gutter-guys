@@ -19,6 +19,10 @@
     {{assets:grid}}  -> renders EVERY asset in that row as a responsive grid
                         of embeds, regardless of how many there are
 
+  The "Masthead" row is special-cased: app.js (the shell) reads it directly
+  to populate the fixed #site-header's menu, so it is NOT rendered into the
+  page body here - see assets/js/app.js's renderSiteMenu().
+
   See /docs/modules/landing-page-rows.md for ready-to-paste row content.
 -->
 <div id="lp-root">
@@ -30,30 +34,6 @@
 
   .lp-loading, .lp-error { text-align: center; padding: 3rem 1rem; color: var(--color-muted, #5b6b7a); }
   .lp-container { width: min(1120px, 100%); margin: 0 auto; padding: 0 1.25rem; }
-
-  /* Masthead */
-  .lp-masthead {
-    position: sticky; top: 0; z-index: 20;
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 1rem; padding: 0.9rem 1.25rem;
-    background: #ffffff; border-bottom: 1px solid var(--color-border, #d7e4f0);
-  }
-  .lp-masthead-brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 1.15rem; color: var(--color-text, #1b2733); text-decoration: none; }
-  .lp-masthead-brand svg { color: var(--color-primary, #0b5fa5); }
-  .lp-nav { display: flex; align-items: center; gap: 1.5rem; }
-  .lp-nav a, .lp-nav button.lp-nav-link {
-    background: none; border: none; font: inherit; cursor: pointer;
-    color: var(--color-text, #1b2733); text-decoration: none; font-weight: 600; font-size: 0.95rem;
-  }
-  .lp-nav a:hover, .lp-nav button.lp-nav-link:hover { color: var(--color-primary, #0b5fa5); }
-  .lp-nav-toggle { display: none; background: none; border: none; cursor: pointer; padding: 0.3rem; }
-  .lp-masthead-cta {
-    display: inline-flex; align-items: center; gap: 0.4rem;
-    background: var(--color-primary, #0b5fa5); color: #fff; font-weight: 700;
-    padding: 0.55rem 1.1rem; border-radius: 0.5rem; text-decoration: none; font-size: 0.9rem;
-    white-space: nowrap;
-  }
-  .lp-masthead-cta:hover { opacity: 0.9; }
 
   /* Hero */
   .lp-hero {
@@ -172,15 +152,6 @@
   .lp-footer-social a { display: inline-flex; color: #cfd9e3; }
   .lp-footer-social a:hover { color: #fff; }
   .lp-footer-bottom { border-top: 1px solid rgba(255,255,255,0.12); padding-top: 1.25rem; font-size: 0.82rem; color: #93a3b3; text-align: center; }
-
-  @media (max-width: 760px) {
-    .lp-nav { position: absolute; top: 100%; left: 0; right: 0; background: #fff; flex-direction: column; align-items: stretch; gap: 0; padding: 0.5rem 1.25rem; border-bottom: 1px solid var(--color-border, #d7e4f0); display: none; }
-    .lp-nav.is-open { display: flex; }
-    .lp-nav a, .lp-nav button.lp-nav-link { padding: 0.75rem 0; border-bottom: 1px solid var(--color-border, #d7e4f0); }
-    .lp-nav-toggle { display: inline-flex; }
-    .lp-masthead { position: relative; }
-    .lp-masthead-cta { display: inline-flex; justify-content: center; margin: 0.75rem 0; border-bottom: none; }
-  }
 </style>
 
 <script>
@@ -258,13 +229,6 @@
         if (!target) return;
         event.preventDefault();
         target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        container.querySelectorAll('.lp-nav.is-open').forEach(function (nav) { nav.classList.remove('is-open'); });
-      });
-    });
-    container.querySelectorAll('.lp-nav-toggle').forEach(function (toggle) {
-      toggle.addEventListener('click', function () {
-        var nav = container.querySelector('.lp-nav');
-        if (nav) nav.classList.toggle('is-open');
       });
     });
   }
@@ -283,9 +247,14 @@
       })
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || 'Unknown backend error');
-        var html = (data.sections || []).map(function (section) {
-          return applyAssetPlaceholders(section.content, section.assets);
-        }).join('\n');
+        var html = (data.sections || [])
+          .filter(function (section) {
+            // Rendered separately into the fixed shell header by app.js.
+            return String(section.section || '').trim().toLowerCase() !== 'masthead';
+          })
+          .map(function (section) {
+            return applyAssetPlaceholders(section.content, section.assets);
+          }).join('\n');
         root.innerHTML = html;
         executeEmbeddedScripts(root);
         wireSmoothScrollNav(root);

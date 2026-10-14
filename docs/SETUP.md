@@ -150,14 +150,34 @@ questions, optional Previous/Next). To use it:
    (single-select, auto-advances) or `type: 'input'` (one or more text
    fields with a `validate(value)` function, requires clicking Next/Enter).
 
+## Fixed site header and the "Masthead" row
+
+Unlike the rest of the page, the header (logo, phone number, "Get a Free
+Quote"/"Login" buttons) is **fixed shell markup** in `index.html` - present
+on every page, the same way `#site-footer` is. Only the menu links in the
+middle are data-driven: `app.js` fetches the `landing page` tab's
+**`Masthead`** row specifically and injects its `content` into the
+header's `#site-menu-links`, regardless of which module is currently
+showing.
+
+- Edit the logo text, phone number, or the "Get a Free Quote"/"Login"
+  buttons directly in `index.html` - these aren't sheet-driven.
+- Edit the `Masthead` row's `content` in the `landing page` tab to change
+  the menu links themselves (add/remove/reorder items) without touching
+  code. Its content is just the links - no logo, CTA, or mobile-toggle
+  markup, since those already live in `index.html`.
+- "Login" is currently a placeholder - clicking it shows a toast; wire it
+  up to a real flow in `app.js`'s `wireLoginPlaceholder()` when ready.
+
 ## Section-based home page (the "landing page" tab)
 
 The home page is built from a **second** sheet tab named **`landing page`**
 (columns: `section`, `content`, `assets`) instead of a single `html` cell -
-each row renders one section of the page (masthead, hero, services,
-footer, etc.), concatenated top to bottom in row order. This lets you
-reorder, add, or remove whole sections of the home page just by
-reordering/adding/deleting sheet rows.
+each row renders one section of the page (hero, services, footer, etc.),
+concatenated top to bottom in row order. This lets you reorder, add, or
+remove whole sections of the home page just by reordering/adding/deleting
+sheet rows. The `Masthead` row is the one exception - see above, it's
+rendered into the fixed header instead of the page body.
 
 - `section` - a label for your own reference; it has no effect on rendering.
 - `content` - plain HTML for that section.
@@ -181,25 +201,28 @@ A row's `content` can reference its own `assets` with:
 1. Create the `landing page` tab with those 3 columns.
 2. Paste each row's `content`/`assets` from
    [`docs/modules/landing-page-rows.md`](/docs/modules/landing-page-rows.md)
-   (a ready-made, generic gutter-company page: masthead, hero, trust bar,
-   services, how-it-works, gallery, testimonials, FAQ, CTA banner, footer) -
-   or write your own rows following the same pattern.
+   (a ready-made, generic gutter-company page: masthead menu, hero, trust
+   bar, services, how-it-works, gallery, testimonials, FAQ, CTA banner,
+   footer) - or write your own rows following the same pattern.
 3. Paste the entire contents of
    [`docs/modules/home.html`](/docs/modules/home.html) into the `html`
    column of the `Modules` row with `module = home`. This is the shared
    bootstrap: it fetches the `landing page` tab, resolves placeholders, and
-   assembles/styles the page - you only need to touch it if you want to
-   change the shared CSS framework (`.lp-*` classes) or how placeholders
-   are resolved.
+   assembles/styles the page body (everything except the `Masthead` row) -
+   you only need to touch it if you want to change the shared CSS
+   framework (`.lp-*` classes) or how placeholders are resolved.
 4. Replace the placeholder stock-photo URLs in the Hero/Gallery rows'
    `assets` with your own (e.g. links into your Drive assets folder).
 
-In-page navigation (masthead/footer links to other sections, like
-"Services" or "FAQ") uses `data-scroll-to="target-id"` + smooth-scrolling,
-**not** `href="#target-id"` - the app's router already treats any `#hash`
-change as "go to this module", so a plain in-page anchor link would be
-misread as navigating to a (nonexistent) module. Links that should actually
-change pages, like "Get a Free Quote", still use a normal `href="#rfq"`.
+In-page navigation (header menu links and footer quick links to other
+sections, like "Services" or "FAQ") uses `data-scroll-to="target-id"` +
+smooth-scrolling, **not** `href="#target-id"` - the app's router already
+treats any `#hash` change as "go to this module", so a plain in-page anchor
+link would be misread as navigating to a (nonexistent) module. Clicking a
+menu item while on a different page (e.g. RFQ) navigates to the home
+module first, then scrolls once it has rendered. Links that should
+actually change pages, like "Get a Free Quote", still use a normal
+`href="#rfq"`.
 
 ## 7. PWA install
 
