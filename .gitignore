@@ -1,0 +1,18 @@
+# Cloudflare Wrangler local secrets & build state - never commit real
+# secret values (APPS_SCRIPT_URL). Use `wrangler secret put` for production
+# and .dev.vars (below) for local `wrangler dev` testing instead.
+backend/cloudflare-worker/.dev.vars
+backend/cloudflare-worker/.wrangler/
+.wrangler/
+
+# Node (in case tooling/dependencies are ever added)
+node_modules/
+
+# Generic env files, except checked-in templates
+.env
+.env.*
+!.env.*.example
+
+# OS/editor cruft
+.DS_Store
+Thumbs.db

@@ -1,0 +1,25 @@
+name = "rainguard-proxy"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+# APPS_SCRIPT_URL is NOT set here on purpose - it's a bypass key for your
+# backend (anyone who has it can call Apps Script directly, skipping this
+# Worker's CORS/cache/rate-limiting). Set it as an encrypted secret instead:
+#   wrangler secret put APPS_SCRIPT_URL
+# For local `wrangler dev` testing, put it in a .dev.vars file instead
+# (gitignored) - see .dev.vars.example in this folder.
+
+[vars]
+# The origin that is allowed to call this Worker (your GitHub Pages site).
+# Not secret - safe to commit. Use "*" temporarily while testing, but lock
+# it down for production.
+ALLOWED_ORIGIN = "https://kgg.kamarble.com"
+
+CACHE_TTL_SECONDS = "300"
+RATE_LIMIT_MAX_REQUESTS = "20"
+RATE_LIMIT_WINDOW_SEC = "60"
+
+# Optional: uncomment and create a KV namespace to enable POST rate limiting.
+# [[kv_namespaces]]
+# binding = "RATE_LIMIT_KV"
+# id = "REPLACE_WITH_KV_NAMESPACE_ID"
