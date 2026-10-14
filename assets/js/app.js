@@ -23,7 +23,7 @@ let modulesByKey = new Map();
 init();
 
 async function init() {
-  document.getElementById('year').textContent = new Date().getFullYear();
+  //document.getElementById('year').textContent = new Date().getFullYear();
   registerServiceWorker();
   wireRemoteForms();
   wireMenuToggle();
