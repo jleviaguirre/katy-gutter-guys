@@ -19,9 +19,9 @@
     {{assets:grid}}  -> renders EVERY asset in that row as a responsive grid
                         of embeds, regardless of how many there are
 
-  The "Masthead" row is special-cased: app.js (the shell) reads it directly
-  to populate the fixed #site-header's menu, so it is NOT rendered into the
-  page body here - see assets/js/app.js's renderSiteMenu().
+  The fixed shell header in index.html provides the logo/phone/CTA/login -
+  the "Masthead" row here is just the in-page menu bar (Services/How It
+  Works/etc.), rendered as a normal section at the top of the page body.
 
   See /docs/modules/landing-page-rows.md for ready-to-paste row content.
 -->
@@ -34,6 +34,19 @@
 
   .lp-loading, .lp-error { text-align: center; padding: 3rem 1rem; color: var(--color-muted, #5b6b7a); }
   .lp-container { width: min(1120px, 100%); margin: 0 auto; padding: 0 1.25rem; }
+
+  /* Menu bar (the "Masthead" row) - the logo/phone/CTA/login live in the
+     fixed shell header; this is just the in-page section links. */
+  .lp-menu-bar { border-bottom: 1px solid var(--color-border, #d7e4f0); }
+  .lp-menu-bar-inner {
+    display: flex; flex-wrap: wrap; justify-content: center;
+    gap: 0.5rem 1.75rem; padding: 0.9rem 1.25rem;
+  }
+  .lp-menu-bar .lp-nav-link {
+    background: none; border: none; font: inherit; cursor: pointer;
+    color: var(--color-text, #1b2733); text-decoration: none; font-weight: 600; font-size: 0.92rem;
+  }
+  .lp-menu-bar .lp-nav-link:hover { color: var(--color-primary, #0b5fa5); }
 
   /* Hero */
   .lp-hero {
@@ -247,14 +260,9 @@
       })
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || 'Unknown backend error');
-        var html = (data.sections || [])
-          .filter(function (section) {
-            // Rendered separately into the fixed shell header by app.js.
-            return String(section.section || '').trim().toLowerCase() !== 'masthead';
-          })
-          .map(function (section) {
-            return applyAssetPlaceholders(section.content, section.assets);
-          }).join('\n');
+        var html = (data.sections || []).map(function (section) {
+          return applyAssetPlaceholders(section.content, section.assets);
+        }).join('\n');
         root.innerHTML = html;
         executeEmbeddedScripts(root);
         wireSmoothScrollNav(root);

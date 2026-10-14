@@ -17,11 +17,10 @@ Placeholder syntax available in `content`: `{{asset:0}}` (full embed tag),
 that row, rendered as a responsive grid) - see comments at the top of
 `home.html` for details.
 
-The **Masthead** row is special: it's not rendered into the page body at
-all. The fixed shell header (`index.html`/`app.js`) reads this row directly
-to populate its menu, so `content` here should be just the menu links -
-no logo, CTA button, or mobile toggle (those are already fixed, static
-markup in `index.html`).
+The logo, phone number, "Get a Free Quote", and "Login" buttons are fixed,
+static markup in `index.html` (not sheet-driven). The **Masthead** row
+below is just the in-page menu bar that renders at the top of the page
+body - add/remove/reorder its links here without touching code.
 
 ---
 
@@ -29,10 +28,14 @@ markup in `index.html`).
 
 **content:**
 ```html
-<button type="button" class="site-menu-link" data-scroll-to="lp-services">Services</button>
-<button type="button" class="site-menu-link" data-scroll-to="lp-how-it-works">How It Works</button>
-<button type="button" class="site-menu-link" data-scroll-to="lp-testimonials">Reviews</button>
-<button type="button" class="site-menu-link" data-scroll-to="lp-faq">FAQ</button>
+<nav class="lp-menu-bar">
+  <div class="lp-menu-bar-inner lp-container">
+    <button type="button" class="lp-nav-link" data-scroll-to="lp-services">Services</button>
+    <button type="button" class="lp-nav-link" data-scroll-to="lp-how-it-works">How It Works</button>
+    <button type="button" class="lp-nav-link" data-scroll-to="lp-testimonials">Reviews</button>
+    <button type="button" class="lp-nav-link" data-scroll-to="lp-faq">FAQ</button>
+  </div>
+</nav>
 ```
 
 **assets:** `[]`

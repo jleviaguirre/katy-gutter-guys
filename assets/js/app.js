@@ -12,9 +12,6 @@ const { API_BASE_URL, DEFAULT_MODULE } = window.APP_CONFIG;
 
 const appEl = document.getElementById('app');
 const toastEl = document.getElementById('toast');
-const menuEl = document.getElementById('site-menu');
-const menuLinksEl = document.getElementById('site-menu-links');
-const menuToggleEl = document.getElementById('site-menu-toggle');
 const loginBtnEl = document.getElementById('site-login-btn');
 
 /** module name (lowercase) -> module row from the sheet */
@@ -26,13 +23,11 @@ async function init() {
   //document.getElementById('year').textContent = new Date().getFullYear();
   registerServiceWorker();
   wireRemoteForms();
-  wireMenuToggle();
   wireLoginPlaceholder();
 
   try {
-    const [modules, sections] = await Promise.all([fetchModules(), fetchLandingSections()]);
+    const modules = await fetchModules();
     indexModules(modules);
-    renderSiteMenu(sections);
     window.addEventListener('hashchange', renderCurrentRoute);
     renderCurrentRoute();
   } catch (err) {
@@ -52,81 +47,10 @@ async function fetchModules() {
   return data.modules || [];
 }
 
-/**
- * The site menu's items are authored as the "Masthead" row of the landing
- * page sheet tab, even though (unlike the rest of that tab) they render
- * into the fixed shell header rather than into #app. Fails soft (empty
- * menu) rather than blocking the whole page if this fetch has a problem.
- */
-async function fetchLandingSections() {
-  try {
-    const response = await fetch(`${API_BASE_URL}/?view=landing`);
-    if (!response.ok) return [];
-    const data = await response.json();
-    return data.ok ? data.sections || [] : [];
-  } catch (err) {
-    console.error(err);
-    return [];
-  }
-}
-
 function indexModules(modules) {
   modulesByKey = new Map(
     modules.map((row) => [String(row.module).toLowerCase(), row])
   );
-}
-
-/** Renders the "Masthead" landing-page row's content as the fixed header's
- * menu. Its links use data-scroll-to (not href="#id") to avoid colliding
- * with the module router - see wireMenuScroll(). */
-function renderSiteMenu(sections) {
-  if (!menuLinksEl) return;
-  const masthead = sections.find((s) => String(s.section || '').trim().toLowerCase() === 'masthead');
-  menuLinksEl.innerHTML = masthead ? masthead.content || '' : '';
-  executeEmbeddedScripts(menuLinksEl);
-  wireMenuScroll();
-}
-
-/**
- * Smooth-scrolls to an in-page section for [data-scroll-to] elements. If
- * the target isn't on the current page (e.g. clicking "Services" while
- * viewing the RFQ module), navigates to the home module first and scrolls
- * once its content has rendered.
- */
-function wireMenuScroll() {
-  menuLinksEl.querySelectorAll('[data-scroll-to]').forEach((el) => {
-    el.addEventListener('click', (event) => {
-      event.preventDefault();
-      closeMenu();
-      const targetId = el.getAttribute('data-scroll-to');
-      const target = document.getElementById(targetId);
-      if (target) {
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        return;
-      }
-      if (currentModuleKey() !== DEFAULT_MODULE) {
-        window.location.hash = DEFAULT_MODULE;
-        const scrollWhenReady = () => {
-          const el2 = document.getElementById(targetId);
-          if (el2) {
-            el2.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-        };
-        window.setTimeout(scrollWhenReady, 150);
-      }
-    });
-  });
-}
-
-function wireMenuToggle() {
-  if (!menuToggleEl || !menuEl) return;
-  menuToggleEl.addEventListener('click', () => {
-    menuEl.classList.toggle('is-open');
-  });
-}
-
-function closeMenu() {
-  if (menuEl) menuEl.classList.remove('is-open');
 }
 
 function wireLoginPlaceholder() {
@@ -142,7 +66,6 @@ function currentModuleKey() {
 }
 
 function renderCurrentRoute() {
-  closeMenu();
   const key = currentModuleKey();
   const row = modulesByKey.get(key);
 
