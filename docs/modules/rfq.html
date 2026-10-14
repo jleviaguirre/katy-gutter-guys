@@ -1,0 +1,369 @@
+<!--
+  RFQ module - step-by-step quote request form.
+  Paste this ENTIRE block into the "html" column of the Modules sheet, on a
+  row with module = RFQ (title/navLabel/order/showInNav columns are yours to
+  set as usual). Submissions are appended to a dedicated "RFQ" sheet tab
+  (auto-created with dynamic headers) via the shared Apps Script backend -
+  no other backend changes are needed beyond what's already in Code.gs.
+-->
+<section class="rfq" id="rfq-root">
+  <div class="rfq-card" id="rfq-card">
+    <div class="rfq-meta">
+      <span class="rfq-step-count" id="rfq-step-count"></span>
+      <div class="rfq-progress"><div class="rfq-progress-bar" id="rfq-progress-bar"></div></div>
+    </div>
+    <div class="rfq-question" id="rfq-question"></div>
+    <p class="rfq-error" id="rfq-form-error" role="alert" hidden></p>
+    <div class="rfq-actions">
+      <button type="button" class="rfq-btn rfq-btn-ghost" id="rfq-prev"></button>
+      <button type="button" class="rfq-btn rfq-btn-primary" id="rfq-next"></button>
+    </div>
+  </div>
+  <div class="rfq-success" id="rfq-success" hidden>
+    <span class="rfq-success-icon"></span>
+    <h2>Thanks! Your request is in.</h2>
+    <p>A RainGuard specialist will reach out shortly with your free quote.</p>
+  </div>
+</section>
+
+<style>
+  .rfq { display: flex; justify-content: center; padding: 1rem 0; }
+  .rfq-card {
+    width: 100%;
+    max-width: 560px;
+    background: #ffffff;
+    border: 1px solid var(--color-border, #d7e4f0);
+    border-radius: 0.75rem;
+    box-shadow: 0 10px 30px rgba(11, 95, 165, 0.08);
+    padding: 1.5rem;
+  }
+  .rfq-meta { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; }
+  .rfq-step-count { font-size: 0.8rem; color: var(--color-muted, #5b6b7a); white-space: nowrap; }
+  .rfq-progress { flex: 1; height: 6px; background: var(--color-bg, #eaf4ff); border-radius: 999px; overflow: hidden; }
+  .rfq-progress-bar { height: 100%; width: 0%; background: var(--color-primary, #0b5fa5); transition: width 0.3s ease; }
+  .rfq-question { animation: rfq-fade-in 0.25s ease; min-height: 180px; }
+  @keyframes rfq-fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .rfq-title { margin: 0 0 1rem; font-size: 1.25rem; color: var(--color-text, #1b2733); }
+  .rfq-options { display: grid; gap: 0.75rem; }
+  .rfq-options--plain { grid-template-columns: 1fr; }
+  .rfq-options--icons { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+  .rfq-option {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    border: 1.5px solid var(--color-border, #d7e4f0);
+    border-radius: 0.6rem;
+    background: #ffffff;
+    color: var(--color-text, #1b2733);
+    font: inherit;
+    font-size: 1rem;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+  }
+  .rfq-options--icons .rfq-option { flex-direction: column; text-align: center; padding: 1rem 0.75rem; }
+  .rfq-option:hover { border-color: var(--color-primary, #0b5fa5); }
+  .rfq-option:active { transform: scale(0.98); }
+  .rfq-option.is-selected { border-color: var(--color-primary, #0b5fa5); background: var(--color-bg, #eaf4ff); }
+  .rfq-option-icon { display: flex; color: var(--color-primary, #0b5fa5); flex-shrink: 0; }
+  .rfq-option-label { font-weight: 500; }
+  .rfq-fields { display: flex; flex-direction: column; gap: 0.85rem; }
+  .rfq-field {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    border: 1.5px solid var(--color-border, #d7e4f0);
+    border-radius: 0.6rem;
+    padding: 0.7rem 0.9rem;
+  }
+  .rfq-field:focus-within { border-color: var(--color-primary, #0b5fa5); }
+  .rfq-field-icon { display: flex; color: var(--color-muted, #5b6b7a); flex-shrink: 0; }
+  .rfq-input { border: none; outline: none; font: inherit; font-size: 1rem; width: 100%; color: var(--color-text, #1b2733); }
+  .rfq-error { color: #9a2222; font-size: 0.85rem; margin: 0.75rem 0 0; }
+  .rfq-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; gap: 0.75rem; }
+  .rfq-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: none;
+    border-radius: 0.5rem;
+    padding: 0.65rem 1.1rem;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+  .rfq-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .rfq-btn-ghost { background: transparent; color: var(--color-muted, #5b6b7a); padding-left: 0.25rem; }
+  .rfq-btn-ghost:hover:not(:disabled) { color: var(--color-primary, #0b5fa5); }
+  .rfq-btn-primary { background: var(--color-primary, #0b5fa5); color: #ffffff; margin-left: auto; }
+  .rfq-btn-primary:hover:not(:disabled) { opacity: 0.9; }
+  .rfq-spin { animation: rfq-spin 0.8s linear infinite; }
+  @keyframes rfq-spin { to { transform: rotate(360deg); } }
+  .rfq-success { max-width: 560px; margin: 2rem auto; text-align: center; color: var(--color-text, #1b2733); }
+  .rfq-success-icon { display: inline-flex; color: var(--color-primary, #0b5fa5); margin-bottom: 1rem; }
+  @media (max-width: 480px) {
+    .rfq-card { padding: 1.1rem; border-radius: 0.5rem; }
+    .rfq-options--icons { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+  }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  var ICONS = {
+    check: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    cross: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+    question: '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 1 1 4.6 2.4c-.9.6-1.7 1.1-1.7 2.4"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>',
+    pin: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 1 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+    user: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+    phone: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.4-1.4a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z"/></svg>',
+    mail: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>',
+    arrowLeft: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>',
+    arrowRight: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>',
+    checkCircleBig: '<svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>',
+    spinner: '<svg class="rfq-spin" viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="40 16"/></svg>'
+  };
+
+  function houseIcon(floors) {
+    var lines = '';
+    for (var i = 1; i < floors; i++) {
+      var y = 11 + i * 4;
+      lines += '<line x1="6" y1="' + y + '" x2="18" y2="' + y + '" stroke-width="1.1" opacity="0.6"/>';
+    }
+    return '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">' +
+      '<path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-5h6v5"/>' + lines + '</svg>';
+  }
+
+  var ROOF_ICONS = {
+    Gable: '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M2 14 12 5l10 9"/><path d="M5 13v6h14v-6"/></svg>',
+    Hip: '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M3 13 8 7h8l5 6"/><path d="M5 13v6h14v-6"/></svg>',
+    Flat: '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M4 9h16"/><path d="M5 9v10h14V9"/></svg>'
+  };
+
+  var YES_NO = [
+    { value: 'Yes', label: 'Yes', icon: ICONS.check },
+    { value: 'No', label: 'No', icon: ICONS.cross }
+  ];
+
+  var QUESTIONS = [
+    { id: 'homeowner', type: 'choice', title: 'Are you a homeowner?', options: YES_NO },
+    { id: 'homeSize', type: 'icon-choice', title: 'What is the size of your home?', options: [
+      { value: 'Under 1,500 sq ft', label: 'Under 1,500 sq. ft.', icon: houseIcon(1) },
+      { value: '1,500 - 3,000 sq ft', label: '1,500 - 3,000 sq. ft.', icon: houseIcon(2) },
+      { value: 'Over 3,500 sq ft', label: 'Over 3,500 sq. ft.', icon: houseIcon(3) }
+    ] },
+    { id: 'stories', type: 'icon-choice', title: 'How many stories is your home?', options: [
+      { value: '1 story', label: '1 story', icon: houseIcon(1) },
+      { value: '2 stories', label: '2 stories', icon: houseIcon(2) },
+      { value: '3 stories', label: '3 stories', icon: houseIcon(3) }
+    ] },
+    { id: 'need', type: 'choice', title: 'What do you need?', options: [
+      { value: 'Just gutter guards', label: 'Just gutter guards' },
+      { value: 'Just gutters', label: 'Just gutters' },
+      { value: 'Gutters & gutter guards', label: 'Gutters & gutter guards' },
+      { value: 'Not sure', label: "I'm not sure" }
+    ] },
+    { id: 'roofShape', type: 'icon-choice', title: 'What is the shape of your roof?', options: [
+      { value: 'Gable', label: 'Gable', icon: ROOF_ICONS.Gable },
+      { value: 'Hip', label: 'Hip', icon: ROOF_ICONS.Hip },
+      { value: 'Flat', label: 'Flat', icon: ROOF_ICONS.Flat },
+      { value: 'Not sure', label: 'Not sure', icon: ICONS.question }
+    ] },
+    { id: 'existingGutters', type: 'choice', title: 'Do you have existing gutters?', options: YES_NO },
+    { id: 'oldGuardsRemoval', type: 'choice', title: 'Do you have old gutter guards that need to be removed?', options: YES_NO },
+    { id: 'treesNearby', type: 'choice', title: 'Do you have trees near your home?', options: YES_NO },
+    { id: 'planningStage', type: 'choice', title: 'Where are you in the planning process?', options: [
+      { value: 'Ready to move forward', label: 'Ready to move forward' },
+      { value: 'Researching options', label: 'Researching my options' },
+      { value: 'Just gathering information', label: 'Just gathering information' }
+    ] },
+    { id: 'discountEligible', type: 'choice', title: 'Does anyone in your household qualify for a senior or military discount?', options: YES_NO },
+    { id: 'zip', type: 'input', title: 'What is your ZIP code?', fields: [
+      { name: 'zip', type: 'text', inputmode: 'numeric', maxlength: 5, placeholder: 'e.g. 77494', icon: ICONS.pin,
+        validate: function (v) { return /^\d{5}$/.test(v.trim()); } }
+    ] },
+    { id: 'name', type: 'input', title: 'Who should we prepare this free quote for?', fields: [
+      { name: 'firstName', type: 'text', placeholder: 'First name', icon: ICONS.user, autocomplete: 'given-name',
+        validate: function (v) { return v.trim().length > 0; } },
+      { name: 'lastName', type: 'text', placeholder: 'Last name', icon: ICONS.user, autocomplete: 'family-name',
+        validate: function (v) { return v.trim().length > 0; } }
+    ] },
+    { id: 'contact', type: 'input', title: 'Where should we send your information?', fields: [
+      { name: 'phone', type: 'tel', placeholder: 'Phone number', icon: ICONS.phone, autocomplete: 'tel',
+        validate: function (v) { return /^[0-9()+\-\s]{7,}$/.test(v.trim()); } },
+      { name: 'email', type: 'email', placeholder: 'Email address', icon: ICONS.mail, autocomplete: 'email',
+        validate: function (v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()); } }
+    ] }
+  ];
+
+  var root = document.getElementById('rfq-root');
+  if (!root) return;
+
+  var card = root.querySelector('#rfq-card');
+  var questionEl = root.querySelector('#rfq-question');
+  var stepCountEl = root.querySelector('#rfq-step-count');
+  var progressBarEl = root.querySelector('#rfq-progress-bar');
+  var prevBtn = root.querySelector('#rfq-prev');
+  var nextBtn = root.querySelector('#rfq-next');
+  var formErrorEl = root.querySelector('#rfq-form-error');
+  var successEl = root.querySelector('#rfq-success');
+
+  successEl.querySelector('.rfq-success-icon').innerHTML = ICONS.checkCircleBig;
+  prevBtn.innerHTML = ICONS.arrowLeft + ' Previous';
+  nextBtn.innerHTML = 'Next ' + ICONS.arrowRight;
+
+  var index = 0;
+  var answers = {};
+  var submitting = false;
+
+  function currentQuestion() { return QUESTIONS[index]; }
+
+  function isAnswered(q) {
+    if (q.type === 'choice' || q.type === 'icon-choice') {
+      return answers[q.id] !== undefined && answers[q.id] !== '';
+    }
+    return q.fields.every(function (f) {
+      var v = answers[f.name] || '';
+      return f.validate ? f.validate(v) : v.trim().length > 0;
+    });
+  }
+
+  function escapeHtml(value) {
+    var div = document.createElement('div');
+    div.textContent = String(value == null ? '' : value);
+    return div.innerHTML;
+  }
+
+  function render() {
+    var q = currentQuestion();
+    stepCountEl.textContent = 'Step ' + (index + 1) + ' of ' + QUESTIONS.length;
+    progressBarEl.style.width = Math.round((index / QUESTIONS.length) * 100) + '%';
+    formErrorEl.hidden = true;
+    prevBtn.disabled = index === 0;
+    prevBtn.style.visibility = index === 0 ? 'hidden' : 'visible';
+
+    if (q.type === 'input') {
+      questionEl.innerHTML =
+        '<h2 class="rfq-title">' + escapeHtml(q.title) + '</h2>' +
+        '<div class="rfq-fields">' +
+        q.fields.map(function (f) {
+          var val = answers[f.name] || '';
+          return '<label class="rfq-field">' +
+            '<span class="rfq-field-icon">' + f.icon + '</span>' +
+            '<input class="rfq-input" type="' + f.type + '" name="' + f.name + '" ' +
+            'placeholder="' + escapeHtml(f.placeholder) + '" autocomplete="' + (f.autocomplete || 'off') + '" ' +
+            (f.inputmode ? 'inputmode="' + f.inputmode + '" ' : '') +
+            (f.maxlength ? 'maxlength="' + f.maxlength + '" ' : '') +
+            'value="' + escapeHtml(val) + '">' +
+            '</label>';
+        }).join('') +
+        '</div>';
+
+      var inputs = questionEl.querySelectorAll('.rfq-input');
+      inputs.forEach(function (input, i) {
+        input.addEventListener('input', function () {
+          answers[input.name] = input.value;
+          updateNextState();
+        });
+        input.addEventListener('keydown', function (event) {
+          if (event.key !== 'Enter') return;
+          event.preventDefault();
+          if (i < inputs.length - 1) {
+            inputs[i + 1].focus();
+          } else if (isAnswered(q)) {
+            goNext();
+          }
+        });
+      });
+      if (inputs.length) inputs[0].focus();
+    } else {
+      var isIcon = q.type === 'icon-choice';
+      questionEl.innerHTML =
+        '<h2 class="rfq-title">' + escapeHtml(q.title) + '</h2>' +
+        '<div class="rfq-options ' + (isIcon ? 'rfq-options--icons' : 'rfq-options--plain') + '" role="radiogroup" aria-label="' + escapeHtml(q.title) + '">' +
+        q.options.map(function (opt) {
+          var selected = answers[q.id] === opt.value;
+          return '<button type="button" class="rfq-option' + (selected ? ' is-selected' : '') + '" ' +
+            'data-value="' + escapeHtml(opt.value) + '" role="radio" aria-checked="' + selected + '">' +
+            (opt.icon ? '<span class="rfq-option-icon">' + opt.icon + '</span>' : '') +
+            '<span class="rfq-option-label">' + escapeHtml(opt.label) + '</span>' +
+            '</button>';
+        }).join('') +
+        '</div>';
+
+      questionEl.querySelectorAll('.rfq-option').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          answers[q.id] = btn.dataset.value;
+          questionEl.querySelectorAll('.rfq-option').forEach(function (b) {
+            var isSelected = b === btn;
+            b.classList.toggle('is-selected', isSelected);
+            b.setAttribute('aria-checked', String(isSelected));
+          });
+          updateNextState();
+          setTimeout(function () { goNext(); }, 280);
+        });
+      });
+    }
+
+    updateNextState();
+  }
+
+  function updateNextState() {
+    var q = currentQuestion();
+    nextBtn.disabled = !isAnswered(q);
+    nextBtn.innerHTML = (index === QUESTIONS.length - 1 ? 'Submit ' : 'Next ') + ICONS.arrowRight;
+  }
+
+  function goNext() {
+    if (submitting) return;
+    var q = currentQuestion();
+    if (!isAnswered(q)) {
+      updateNextState();
+      return;
+    }
+    if (index === QUESTIONS.length - 1) {
+      submit();
+      return;
+    }
+    index += 1;
+    render();
+  }
+
+  function goPrev() {
+    if (submitting || index === 0) return;
+    index -= 1;
+    render();
+  }
+
+  function submit() {
+    submitting = true;
+    nextBtn.disabled = true;
+    prevBtn.disabled = true;
+    nextBtn.innerHTML = ICONS.spinner + ' Submitting...';
+    formErrorEl.hidden = true;
+
+    window.RainGuard.submitForm('RFQ', 'rfq-form', answers, { sheetName: 'RFQ' })
+      .then(function () {
+        card.hidden = true;
+        successEl.hidden = false;
+      })
+      .catch(function (err) {
+        console.error(err);
+        formErrorEl.textContent = 'Something went wrong submitting your request. Please try again.';
+        formErrorEl.hidden = false;
+        submitting = false;
+        prevBtn.disabled = index === 0;
+        updateNextState();
+      });
+  }
+
+  prevBtn.addEventListener('click', goPrev);
+  nextBtn.addEventListener('click', goNext);
+
+  render();
+})();
+</script>

@@ -149,12 +149,16 @@ function executeEmbeddedScripts(container) {
   });
 }
 
-/** Lets embedded inline scripts post form data back through the Worker. */
-async function submitForm(module, formId, fields) {
+/**
+ * Lets embedded inline scripts post form data back through the Worker.
+ * `options.sheetName` routes the submission to its own Sheet tab (auto-
+ * created with dynamic headers) instead of the shared "Submissions" tab.
+ */
+async function submitForm(module, formId, fields, options = {}) {
   const response = await fetch(`${API_BASE_URL}/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ module, formId, fields })
+    body: JSON.stringify({ module, formId, fields, sheetName: options.sheetName })
   });
   const data = await response.json().catch(() => ({ ok: false, error: 'Invalid response' }));
   if (!data.ok) {
@@ -175,7 +179,7 @@ function wireRemoteForms() {
     const fields = Object.fromEntries(new FormData(form).entries());
 
     try {
-      await submitForm(module, formId, fields);
+      await submitForm(module, formId, fields, { sheetName: form.dataset.sheetName });
       showToast('Thanks! Your submission was received.');
       form.reset();
     } catch (err) {

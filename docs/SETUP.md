@@ -52,6 +52,14 @@ a form is submitted - you don't need to create it yourself.
    - Who has access: **Anyone**
 6. Copy the resulting `.../exec` URL - you'll need it for the Worker.
 
+> **Updating Code.gs later:** editing the script in the Apps Script editor
+> does NOT update your live `.../exec` URL by itself. After pasting in
+> changes, go to **Deploy > Manage deployments**, click the pencil/edit icon
+> on your existing Web app deployment, set Version to **New version**, and
+> deploy. This keeps the same `.../exec` URL (so the Worker's
+> `APPS_SCRIPT_URL` secret doesn't need to change) while running your
+> updated code.
+
 ## 3. Deploy the Cloudflare Worker
 
 ```powershell
@@ -111,10 +119,31 @@ Repo **Settings > Pages** -> Deploy from branch -> `main` / `/ (root)`.
 - Add a `<form class="js-remote-form" data-form-id="contact">...</form>`
   (with normal `<input name="...">` fields) to a module's `html` cell to get
   a working, no-JS-required form submission that lands in the `Submissions`
-  tab.
+  tab. Add `data-sheet-name="SomeTab"` to route that form's submissions to
+  their own tab instead (auto-created with dynamic headers).
 - Embedded `<script>` tags in a module's `html` cell run on render; they can
-  call `window.RainGuard.submitForm(module, formId, fieldsObject)` or
-  `window.RainGuard.showToast(message)` directly if you need custom logic.
+  call `window.RainGuard.submitForm(module, formId, fieldsObject, { sheetName })`
+  or `window.RainGuard.showToast(message)` directly if you need custom logic.
+  `sheetName` is optional and defaults to the shared `Submissions` tab.
+
+## Multi-step forms (e.g. the RFQ module)
+
+[`docs/modules/rfq.html`](/docs/modules/rfq.html) is a ready-to-use,
+self-contained step-by-step quote-request form (one question per screen,
+SVG icons, required-answer validation, auto-advance on single-select
+questions, optional Previous/Next). To use it:
+
+1. Copy the entire contents of that file into the `html` column of a
+   `Modules` row with `module = RFQ` (set `title`/`navLabel`/`order` as you
+   like).
+2. Its answers are posted with `sheetName: 'RFQ'`, so they land in their own
+   `RFQ` tab in the Sheet (auto-created with dynamic headers on first
+   submission) rather than the shared `Submissions` tab.
+3. To build a similar step-by-step form for another module, copy that file
+   as a starting point and edit the `QUESTIONS` array at the top of its
+   `<script>` - each entry is either `type: 'choice'` / `'icon-choice'`
+   (single-select, auto-advances) or `type: 'input'` (one or more text
+   fields with a `validate(value)` function, requires clicking Next/Enter).
 
 ## 7. PWA install
 

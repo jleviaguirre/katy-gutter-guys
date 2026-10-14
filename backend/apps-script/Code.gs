@@ -44,7 +44,11 @@ function doGet(e) {
 
 /**
  * POST /exec
- * Body (JSON): { module: "contact", formId: "contact-form", fields: { ... } }
+ * Body (JSON): { module: "contact", formId: "contact-form", fields: { ... },
+ *                sheetName: "RFQ" (optional) }
+ * By default submissions are appended to the shared "Submissions" tab. Pass
+ * `sheetName` to route a form's data to its own dedicated tab instead (it is
+ * auto-created with dynamic headers the same way "Submissions" is).
  * Any field whose value looks like { fileName, mimeType, data (base64) } is
  * uploaded to Drive and replaced with the resulting file URL before saving.
  */
@@ -57,6 +61,7 @@ function doPost(e) {
     var module = body.module || 'unknown';
     var formId = body.formId || 'default';
     var fields = body.fields || {};
+    var sheetName = body.sheetName || SUBMISSIONS_SHEET_NAME;
 
     var processedFields = {};
     Object.keys(fields).forEach(function (key) {
@@ -68,7 +73,7 @@ function doPost(e) {
       }
     });
 
-    var sheet = getSheet_(SUBMISSIONS_SHEET_NAME, true);
+    var sheet = getSheet_(sheetName, true);
     var row = Object.assign(
       {
         timestamp: new Date(),
