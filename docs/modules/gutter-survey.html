@@ -1,0 +1,1474 @@
+<!--
+  Gutter Survey module - lets a technician (with a tape measure, on site) or
+  a homeowner (just walking around with their phone) capture photos, short
+  (<=30s, stoppable anytime) videos, and audio notes while walking the
+  roofline, and turns that into a labeled gutter/downspout diagram plus
+  quote-ready totals (total gutter LF, downspout count/LF, corner count).
+
+  Paste this ENTIRE block into the "html" column of the Modules sheet, on a
+  row with module = Survey (title/navLabel/order/showInNav are yours to set
+  as usual, e.g. navLabel "Photo Survey"). Submissions land in their own
+  "GutterSurvey" sheet tab (auto-created with dynamic headers), and every
+  photo/video/audio clip for a visit is uploaded into its own per-customer
+  subfolder inside the Drive folder configured as DRIVE_FOLDER_ID. This
+  relies on the `action: "uploadAsset"` endpoint and `folderName` nesting
+  added to Code.gs alongside this module - see /docs/SETUP.md.
+
+  Captured media is kept on-device (IndexedDB) until the visit is
+  submitted, so nothing is lost to a flaky connection or an accidental tab
+  reload while someone is mid-walkaround; uploads happen one file at a
+  time (not bundled into one giant request) with per-file retry.
+-->
+<section class="gsv" id="gsv-root">
+  <div class="gsv-card" id="gsv-card">
+    <button type="button" class="gsv-start-over" id="gsv-start-over" hidden>Start over</button>
+    <div id="gsv-stage"></div>
+  </div>
+
+  <div class="gsv-success" id="gsv-success" hidden>
+    <span class="gsv-success-icon">&#10003;</span>
+    <h2>Thanks! Your gutter survey is in.</h2>
+    <p>A Gutter Guys of Katy specialist will review your photos and follow up with your quote.</p>
+    <a class="gsv-btn gsv-btn-primary gsv-success-home" href="#home">Back to Home</a>
+  </div>
+
+  <div class="gsv-capture" id="gsv-capture" hidden>
+    <div class="gsv-capture-inner">
+      <button type="button" class="gsv-capture-close" id="gsv-cap-close" aria-label="Close camera">&times;</button>
+      <div class="gsv-capture-stage">
+        <video id="gsv-capture-video" autoplay playsinline muted></video>
+        <img id="gsv-capture-photo-preview" alt="Captured photo" hidden>
+        <audio id="gsv-capture-audio-preview" controls hidden></audio>
+        <canvas id="gsv-capture-canvas" hidden></canvas>
+        <div class="gsv-capture-timer" id="gsv-capture-timer" hidden></div>
+        <p class="gsv-capture-error" id="gsv-capture-error" hidden></p>
+      </div>
+      <div class="gsv-capture-bar" id="gsv-capture-bar">
+        <button type="button" class="gsv-cap-btn" id="gsv-cap-photo">Photo</button>
+        <button type="button" class="gsv-cap-btn gsv-cap-btn-accent" id="gsv-cap-video">Record video</button>
+        <button type="button" class="gsv-cap-btn" id="gsv-cap-audio">Audio note</button>
+        <button type="button" class="gsv-cap-btn gsv-cap-btn-stop" id="gsv-cap-stop" hidden>Stop</button>
+      </div>
+      <div class="gsv-capture-review" id="gsv-capture-review" hidden>
+        <button type="button" class="gsv-btn gsv-btn-ghost" id="gsv-cap-retake">Retake</button>
+        <button type="button" class="gsv-btn gsv-btn-primary" id="gsv-cap-use">Use this</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .gsv { display: flex; justify-content: center; padding: 1rem 0; }
+  .gsv-card {
+    position: relative;
+    width: 100%;
+    max-width: 760px;
+    background: #ffffff;
+    border: 1px solid var(--color-border, #d7e4f0);
+    border-radius: 0.75rem;
+    box-shadow: 0 10px 30px rgba(11, 95, 165, 0.08);
+    padding: 1.5rem;
+  }
+  .gsv-start-over {
+    position: absolute;
+    top: 1rem;
+    right: 1.25rem;
+    background: none;
+    border: none;
+    color: var(--color-muted, #5b6b7a);
+    font: inherit;
+    font-size: 0.8rem;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .gsv-start-over:hover { color: var(--color-primary, #0b5fa5); }
+
+  .gsv-intro h1 { margin: 0 0 0.5rem; font-size: 1.4rem; color: var(--color-text, #1b2733); }
+  .gsv-intro p { margin: 0 0 1.25rem; color: var(--color-muted, #5b6b7a); }
+  .gsv-role-grid { display: grid; gap: 0.85rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .gsv-role-btn {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    text-align: left;
+    padding: 1rem 1.1rem;
+    border: 1.5px solid var(--color-border, #d7e4f0);
+    border-radius: 0.6rem;
+    background: #ffffff;
+    font: inherit;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .gsv-role-btn:hover { border-color: var(--color-primary, #0b5fa5); background: var(--color-bg, #eaf4ff); }
+  .gsv-role-title { font-weight: 700; color: var(--color-text, #1b2733); }
+  .gsv-role-desc { font-size: 0.85rem; color: var(--color-muted, #5b6b7a); }
+
+  .gsv-step-title { margin: 0 0 0.35rem; font-size: 1.25rem; color: var(--color-text, #1b2733); }
+  .gsv-step-sub { margin: 0 0 1.1rem; color: var(--color-muted, #5b6b7a); font-size: 0.9rem; }
+  .gsv-fields { display: flex; flex-direction: column; gap: 0.85rem; }
+  .gsv-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; color: var(--color-muted, #5b6b7a); }
+  .gsv-input {
+    border: 1.5px solid var(--color-border, #d7e4f0);
+    border-radius: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    font: inherit;
+    font-size: 1rem;
+    color: var(--color-text, #1b2733);
+    width: 100%;
+  }
+  .gsv-input:focus { outline: none; border-color: var(--color-primary, #0b5fa5); }
+  textarea.gsv-input { resize: vertical; font-family: inherit; }
+
+  .gsv-error { color: #9a2222; font-size: 0.85rem; margin: 0.9rem 0 0; }
+  .gsv-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; gap: 0.75rem; }
+  .gsv-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: none;
+    border-radius: 0.5rem;
+    padding: 0.65rem 1.1rem;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+  .gsv-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .gsv-btn-ghost { background: transparent; color: var(--color-muted, #5b6b7a); }
+  .gsv-btn-ghost:hover:not(:disabled) { color: var(--color-primary, #0b5fa5); }
+  .gsv-btn-primary { background: var(--color-primary, #0b5fa5); color: #ffffff; margin-left: auto; }
+  .gsv-btn-primary:hover:not(:disabled) { opacity: 0.9; }
+  .gsv-btn-outline {
+    background: #ffffff;
+    color: var(--color-primary, #0b5fa5);
+    border: 1.5px solid var(--color-primary, #0b5fa5);
+  }
+  .gsv-btn-outline:hover:not(:disabled) { background: var(--color-bg, #eaf4ff); }
+
+  .gsv-builder, .gsv-review { display: grid; gap: 1.25rem; grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.3fr); }
+  @media (max-width: 680px) { .gsv-builder, .gsv-review { grid-template-columns: 1fr; } }
+
+  .gsv-diagram-pane {
+    border: 1.5px solid var(--color-border, #d7e4f0);
+    border-radius: 0.6rem;
+    padding: 0.85rem;
+    background: var(--color-bg, #eaf4ff);
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .gsv-diagram-svg { width: 100%; height: auto; display: block; background: #ffffff; border-radius: 0.4rem; }
+  .gsv-totals { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .gsv-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+    background: #ffffff;
+    border: 1px solid var(--color-border, #d7e4f0);
+    border-radius: 0.5rem;
+    padding: 0.4rem 0.7rem;
+    font-size: 0.72rem;
+    color: var(--color-muted, #5b6b7a);
+    min-width: 72px;
+  }
+  .gsv-chip strong { font-size: 1rem; color: var(--color-text, #1b2733); }
+  .gsv-chip-total { border-color: var(--color-primary, #0b5fa5); }
+  .gsv-chip-total strong { color: var(--color-primary, #0b5fa5); }
+  .gsv-approx-note { margin: 0; font-size: 0.78rem; color: var(--color-muted, #5b6b7a); font-style: italic; }
+
+  .gsv-section-label { margin: 0 0 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--color-muted, #5b6b7a); text-transform: uppercase; letter-spacing: 0.02em; }
+  .gsv-general { margin-bottom: 1rem; }
+  .gsv-seg-list { list-style: none; margin: 0 0 0.85rem; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; max-height: 320px; overflow-y: auto; }
+  .gsv-seg-row { border: 1px solid var(--color-border, #d7e4f0); border-radius: 0.5rem; padding: 0.55rem 0.7rem; }
+  .gsv-seg-main { display: flex; align-items: center; gap: 0.5rem; }
+  .gsv-seg-icon { font-size: 1rem; }
+  .gsv-seg-title { flex: 1; font-size: 0.9rem; color: var(--color-text, #1b2733); }
+  .gsv-seg-del {
+    background: none;
+    border: none;
+    color: var(--color-muted, #5b6b7a);
+    cursor: pointer;
+    font-size: 0.95rem;
+    line-height: 1;
+    padding: 0.2rem;
+  }
+  .gsv-seg-del:hover { color: #9a2222; }
+
+  .gsv-seg-media { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.5rem; align-items: center; }
+  .gsv-thumb {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    border-radius: 0.4rem;
+    overflow: hidden;
+    border: 1px solid var(--color-border, #d7e4f0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f3f7fb;
+    font-size: 1.3rem;
+  }
+  .gsv-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .gsv-thumb-del {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 16px;
+    height: 16px;
+    line-height: 14px;
+    border-radius: 50%;
+    border: none;
+    background: #9a2222;
+    color: #ffffff;
+    font-size: 0.65rem;
+    cursor: pointer;
+    padding: 0;
+  }
+  .gsv-seg-add-media {
+    background: none;
+    border: 1.5px dashed var(--color-border, #d7e4f0);
+    border-radius: 0.4rem;
+    color: var(--color-primary, #0b5fa5);
+    font-size: 0.78rem;
+    padding: 0.4rem 0.6rem;
+    cursor: pointer;
+  }
+  .gsv-seg-add-media:hover { background: var(--color-bg, #eaf4ff); }
+
+  .gsv-add-buttons { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+
+  .gsv-composer { border: 1.5px solid var(--color-border, #d7e4f0); border-radius: 0.6rem; padding: 0.85rem; display: flex; flex-direction: column; gap: 0.7rem; }
+  .gsv-composer-title { margin: 0; font-weight: 700; font-size: 0.9rem; color: var(--color-text, #1b2733); }
+  .gsv-composer-hint { margin: 0; font-size: 0.8rem; color: var(--color-muted, #5b6b7a); }
+  .gsv-dir-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .gsv-dir-btn {
+    background: #ffffff;
+    border: 1.5px solid var(--color-border, #d7e4f0);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+  }
+  .gsv-dir-btn.is-selected { border-color: var(--color-primary, #0b5fa5); background: var(--color-bg, #eaf4ff); color: var(--color-primary, #0b5fa5); font-weight: 700; }
+  .gsv-composer-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
+
+  .gsv-review-side { display: flex; flex-direction: column; gap: 0.85rem; }
+  .gsv-review-count { margin: 0; font-size: 0.82rem; color: var(--color-muted, #5b6b7a); }
+
+  .gsv-uploading { text-align: center; padding: 1.5rem 0; }
+  .gsv-progress { height: 8px; background: var(--color-bg, #eaf4ff); border-radius: 999px; overflow: hidden; margin: 1rem auto; max-width: 320px; }
+  .gsv-progress-bar { height: 100%; background: var(--color-primary, #0b5fa5); transition: width 0.25s ease; }
+
+  .gsv-success { max-width: 560px; margin: 2rem auto; text-align: center; color: var(--color-text, #1b2733); }
+  .gsv-success-icon { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 50%; background: var(--color-bg, #eaf4ff); color: var(--color-primary, #0b5fa5); font-size: 1.6rem; margin-bottom: 1rem; }
+  .gsv-success-home { margin-top: 1.25rem; text-decoration: none; display: inline-flex; }
+
+  .gsv-capture {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(10, 16, 22, 0.92);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+  }
+  .gsv-capture[hidden] { display: none; }
+  .gsv-capture-inner { position: relative; width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 0.75rem; }
+  .gsv-capture-stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    background: #000;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .gsv-capture-stage video, .gsv-capture-stage img { width: 100%; height: 100%; object-fit: cover; }
+  .gsv-capture-stage audio { width: 90%; }
+  .gsv-capture-timer {
+    position: absolute;
+    top: 0.75rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.55);
+    color: #ffffff;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .gsv-capture-error { position: absolute; bottom: 0.75rem; left: 0.75rem; right: 0.75rem; margin: 0; background: rgba(154, 34, 34, 0.92); color: #fff; padding: 0.6rem 0.75rem; border-radius: 0.5rem; font-size: 0.82rem; }
+  .gsv-capture-bar, .gsv-capture-review { display: flex; justify-content: center; gap: 0.6rem; flex-wrap: wrap; }
+  .gsv-capture-bar[hidden], .gsv-capture-review[hidden] { display: none; }
+  .gsv-cap-btn {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    border: 1.5px solid rgba(255, 255, 255, 0.4);
+    border-radius: 999px;
+    padding: 0.6rem 1.1rem;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .gsv-cap-btn:hover { background: rgba(255, 255, 255, 0.22); }
+  .gsv-cap-btn-accent { background: #c23a3a; border-color: #c23a3a; }
+  .gsv-cap-btn-stop { background: #c23a3a; border-color: #c23a3a; }
+  .gsv-capture-close {
+    position: absolute;
+    top: -0.5rem;
+    right: -0.5rem;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: #ffffff;
+    color: var(--color-text, #1b2733);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 1;
+  }
+
+  @media (max-width: 480px) {
+    .gsv-card { padding: 1.1rem; border-radius: 0.5rem; }
+  }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  var MAX_VIDEO_SECONDS = 30;
+  var PLACEHOLDER_FT = 15; // schematic run length used when no length is given (homeowner mode)
+  var DEFAULT_DOWNSPOUT_DROP_FT = 10; // standard downspout section length
+  var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  var DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]]; // E, S, W, N
+  var DIR_INDEX = { E: 0, S: 1, W: 2, N: 3 };
+  var VIDEO_MIME_CANDIDATES = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
+  var AUDIO_MIME_CANDIDATES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+
+  function uid(prefix) {
+    return prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  }
+
+  function escapeHtml(value) {
+    var div = document.createElement('div');
+    div.textContent = value == null ? '' : String(value);
+    return div.innerHTML;
+  }
+
+  function pickMimeType(candidates) {
+    if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+    for (var i = 0; i < candidates.length; i++) {
+      if (MediaRecorder.isTypeSupported(candidates[i])) return candidates[i];
+    }
+    return '';
+  }
+
+  function pad2(n) { return (n < 10 ? '0' : '') + Math.floor(n); }
+  function formatSeconds(totalSeconds) { return '0:' + pad2(Math.floor(totalSeconds)); }
+
+  function blobToBase64(blob) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onloadend = function () {
+        var result = reader.result || '';
+        var comma = String(result).indexOf(',');
+        resolve(comma === -1 ? '' : result.slice(comma + 1));
+      };
+      reader.onerror = function () { reject(reader.error || new Error('Could not read file')); };
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  var rootEl = document.getElementById('gsv-root');
+  if (!rootEl) return;
+  var cardEl = document.getElementById('gsv-card');
+  var stageEl = document.getElementById('gsv-stage');
+  var successEl = document.getElementById('gsv-success');
+  var startOverBtn = document.getElementById('gsv-start-over');
+
+  var captureEl = document.getElementById('gsv-capture');
+  var captureVideoEl = document.getElementById('gsv-capture-video');
+  var capturePhotoPreviewEl = document.getElementById('gsv-capture-photo-preview');
+  var captureAudioPreviewEl = document.getElementById('gsv-capture-audio-preview');
+  var captureCanvasEl = document.getElementById('gsv-capture-canvas');
+  var captureTimerEl = document.getElementById('gsv-capture-timer');
+  var captureErrorEl = document.getElementById('gsv-capture-error');
+  var capBarEl = document.getElementById('gsv-capture-bar');
+  var capPhotoBtn = document.getElementById('gsv-cap-photo');
+  var capVideoBtn = document.getElementById('gsv-cap-video');
+  var capAudioBtn = document.getElementById('gsv-cap-audio');
+  var capStopBtn = document.getElementById('gsv-cap-stop');
+  var capReviewEl = document.getElementById('gsv-capture-review');
+  var capRetakeBtn = document.getElementById('gsv-cap-retake');
+  var capUseBtn = document.getElementById('gsv-cap-use');
+  var capCloseBtn = document.getElementById('gsv-cap-close');
+
+  // In-memory asset registry (id -> record). Blobs also mirrored to
+  // IndexedDB so captured media survives a reload until it's uploaded.
+  // `status`: 'local' | 'uploading' | 'uploaded' | 'error'.
+  var assets = new Map();
+
+  var state = {
+    sessionId: uid('gsv'),
+    step: 'role', // role -> contact -> builder -> review -> uploading -> done
+    mode: null, // 'technician' | 'homeowner'
+    contact: { name: '', phone: '', email: '' },
+    segments: [], // { id, kind:'run'|'downspout', turn, lengthFt, dropFt, media:[assetId] }
+    generalMedia: [], // assetId[] not tied to a specific segment
+    notes: '',
+    composer: null, // in-progress "add a run/downspout" form state
+    folderName: null,
+    finalizeError: null
+  };
+
+  var capture = {
+    targetId: null,
+    stream: null,
+    recorder: null,
+    recordedChunks: [],
+    recordKind: null,
+    timerId: null,
+    startedAt: 0,
+    pending: null
+  };
+
+  // ---- IndexedDB persistence (best-effort; degrades to in-memory-only if
+  // unavailable) so captured media survives a reload until it's uploaded ----
+  var DB_NAME = 'rg-gutter-survey';
+  var DB_VERSION = 1;
+
+  function idbOpen() {
+    return new Promise(function (resolve) {
+      if (!window.indexedDB) { resolve(null); return; }
+      var req;
+      try {
+        req = indexedDB.open(DB_NAME, DB_VERSION);
+      } catch (err) { resolve(null); return; }
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains('assets')) db.createObjectStore('assets', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('sessions')) db.createObjectStore('sessions', { keyPath: 'sessionId' });
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { resolve(null); };
+    });
+  }
+  var dbPromise = idbOpen();
+
+  function idbPut(storeName, value) {
+    return dbPromise.then(function (db) {
+      if (!db) return;
+      return new Promise(function (resolve) {
+        var tx = db.transaction(storeName, 'readwrite');
+        tx.objectStore(storeName).put(value);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { resolve(); };
+      });
+    });
+  }
+
+  function idbDelete(storeName, key) {
+    return dbPromise.then(function (db) {
+      if (!db) return;
+      return new Promise(function (resolve) {
+        var tx = db.transaction(storeName, 'readwrite');
+        tx.objectStore(storeName).delete(key);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { resolve(); };
+      });
+    });
+  }
+
+  function idbGetAll(storeName) {
+    return dbPromise.then(function (db) {
+      if (!db) return [];
+      return new Promise(function (resolve) {
+        var tx = db.transaction(storeName, 'readonly');
+        var req = tx.objectStore(storeName).getAll();
+        req.onsuccess = function () { resolve(req.result || []); };
+        req.onerror = function () { resolve([]); };
+      });
+    });
+  }
+
+  function idbClear(storeName) {
+    return dbPromise.then(function (db) {
+      if (!db) return;
+      return new Promise(function (resolve) {
+        var tx = db.transaction(storeName, 'readwrite');
+        tx.objectStore(storeName).clear();
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { resolve(); };
+      });
+    });
+  }
+
+  function serializableAsset(a) {
+    return {
+      id: a.id, segmentId: a.segmentId, kind: a.kind, blob: a.blob,
+      mimeType: a.mimeType, fileName: a.fileName, status: a.status,
+      driveUrl: a.driveUrl || null, errorMessage: a.errorMessage || null
+    };
+  }
+
+  function persistSession() {
+    idbPut('sessions', {
+      sessionId: 'active',
+      mode: state.mode,
+      step: state.step,
+      contact: state.contact,
+      segments: state.segments,
+      generalMedia: state.generalMedia,
+      notes: state.notes,
+      folderName: state.folderName,
+      updatedAt: Date.now()
+    });
+  }
+
+  function clearSession() {
+    assets.forEach(function (a) { if (a.objectUrl) URL.revokeObjectURL(a.objectUrl); });
+    assets.clear();
+    return idbClear('assets').then(function () { return idbClear('sessions'); });
+  }
+
+  function tryResume() {
+    return Promise.all([idbGetAll('sessions'), idbGetAll('assets')]).then(function (results) {
+      var session = results[0] && results[0][0];
+      var storedAssets = results[1] || [];
+      if (!session || !session.mode) return false;
+      state.mode = session.mode;
+      state.step = session.step === 'uploading' ? 'review' : (session.step || 'contact');
+      state.contact = session.contact || { name: '', phone: '', email: '' };
+      state.segments = session.segments || [];
+      state.generalMedia = session.generalMedia || [];
+      state.notes = session.notes || '';
+      state.folderName = session.folderName || null;
+      storedAssets.forEach(function (rec) {
+        rec.objectUrl = rec.blob ? URL.createObjectURL(rec.blob) : '';
+        assets.set(rec.id, rec);
+      });
+      return true;
+    }).catch(function () { return false; });
+  }
+
+  function init() {
+    tryResume().then(function (resumed) {
+      if (resumed && window.RainGuard && window.RainGuard.showToast) {
+        window.RainGuard.showToast('Resumed your in-progress gutter survey.');
+      }
+      render();
+    });
+  }
+
+  function computeTotals() {
+    var totalRunFt = 0, haveAllLengths = true, downspoutCount = 0, downspoutFt = 0, cornerCount = 0, firstRunSeen = false;
+    state.segments.forEach(function (seg) {
+      if (seg.kind === 'run') {
+        if (seg.lengthFt != null) totalRunFt += seg.lengthFt; else haveAllLengths = false;
+        if (firstRunSeen && seg.turn !== 'straight') cornerCount++;
+        firstRunSeen = true;
+      } else if (seg.kind === 'downspout') {
+        downspoutCount++;
+        downspoutFt += (seg.dropFt != null ? seg.dropFt : DEFAULT_DOWNSPOUT_DROP_FT);
+      }
+    });
+    haveAllLengths = haveAllLengths && state.mode === 'technician' && firstRunSeen;
+    return {
+      totalRunFt: totalRunFt,
+      haveAllLengths: haveAllLengths,
+      downspoutCount: downspoutCount,
+      downspoutFt: downspoutFt,
+      cornerCount: cornerCount,
+      grandTotalFt: totalRunFt + downspoutFt
+    };
+  }
+
+  function computeLayout() {
+    var heading = 0, x = 0, y = 0, firstRunSeen = false;
+    var points = [{ x: 0, y: 0 }];
+    var labels = [];
+    var corners = [];
+    var downspouts = [];
+
+    state.segments.forEach(function (seg) {
+      if (seg.kind === 'run') {
+        if (!firstRunSeen) {
+          if (DIR_INDEX.hasOwnProperty(seg.turn)) heading = DIR_INDEX[seg.turn];
+        } else {
+          if (seg.turn === 'left') heading = (heading + 3) % 4;
+          else if (seg.turn === 'right') heading = (heading + 1) % 4;
+          if (seg.turn !== 'straight') corners.push({ x: x, y: y });
+        }
+        var len = seg.lengthFt != null ? seg.lengthFt : PLACEHOLDER_FT;
+        var nx = x + DIRS[heading][0] * len;
+        var ny = y + DIRS[heading][1] * len;
+        points.push({ x: nx, y: ny });
+        labels.push({
+          x: (x + nx) / 2,
+          y: (y + ny) / 2,
+          vertical: DIRS[heading][0] === 0,
+          text: seg.lengthFt != null ? (seg.lengthFt + ' ft') : '?'
+        });
+        x = nx; y = ny;
+        firstRunSeen = true;
+      } else if (seg.kind === 'downspout') {
+        downspouts.push({ x: x, y: y });
+      }
+    });
+
+    return { points: points, labels: labels, corners: corners, downspouts: downspouts };
+  }
+
+  function buildDiagramSvg() {
+    var layout = computeLayout();
+    var pts = layout.points;
+    var allX = pts.map(function (p) { return p.x; }).concat(layout.downspouts.map(function (p) { return p.x; }), [0]);
+    var allY = pts.map(function (p) { return p.y; }).concat(layout.downspouts.map(function (p) { return p.y; }), [0]);
+    var minX = Math.min.apply(null, allX), maxX = Math.max.apply(null, allX.concat([minX + 1]));
+    var minY = Math.min.apply(null, allY), maxY = Math.max.apply(null, allY.concat([minY + 1]));
+    var pad = 10;
+    var vbX = minX - pad, vbY = minY - pad - 5;
+    var vbW = Math.max(20, (maxX - minX) + pad * 2);
+    var vbH = Math.max(20, (maxY - minY) + pad * 2 + 5);
+
+    var parts = [];
+    parts.push('<svg viewBox="' + vbX + ' ' + vbY + ' ' + vbW + ' ' + vbH + '" width="' + Math.round(vbW * 8) +
+      '" height="' + Math.round(vbH * 8) + '" class="gsv-diagram-svg" xmlns="http://www.w3.org/2000/svg">');
+
+    if (pts.length > 1) {
+      var d = 'M ' + pts.map(function (p) { return p.x + ' ' + p.y; }).join(' L ');
+      parts.push('<path d="' + d + '" fill="none" stroke="#0b5fa5" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round"/>');
+    }
+    if (pts.length) {
+      parts.push('<circle cx="' + pts[0].x + '" cy="' + pts[0].y + '" r="1.2" fill="#0b5fa5"/>');
+    }
+    layout.corners.forEach(function (c) {
+      parts.push('<rect x="' + (c.x - 1.1) + '" y="' + (c.y - 1.1) + '" width="2.2" height="2.2" fill="#ffffff" stroke="#0b5fa5" stroke-width="0.8"/>');
+    });
+    layout.downspouts.forEach(function (dp) {
+      parts.push('<path d="M ' + dp.x + ' ' + dp.y + ' l -1.1 2.4 l 2.2 0 z" fill="#d97706"/>');
+    });
+    layout.labels.forEach(function (l) {
+      var dx = l.vertical ? 2.4 : 0;
+      var dy = l.vertical ? 0.5 : -1.3;
+      parts.push('<text x="' + (l.x + dx) + '" y="' + (l.y + dy) + '" font-size="2.4" fill="#1b2733" text-anchor="' +
+        (l.vertical ? 'start' : 'middle') + '">' + escapeHtml(l.text) + '</text>');
+    });
+    parts.push('</svg>');
+    return parts.join('');
+  }
+
+  function chip(label, value, isTotal) {
+    return '<span class="gsv-chip' + (isTotal ? ' gsv-chip-total' : '') + '"><strong>' + escapeHtml(value) +
+      '</strong><span>' + escapeHtml(label) + '</span></span>';
+  }
+
+  function renderTotalsHtml(totals) {
+    if (totals.haveAllLengths) {
+      return chip('Gutters', totals.totalRunFt + ' ft') +
+        chip('Downspouts', totals.downspoutCount + ' (' + totals.downspoutFt + ' ft)') +
+        chip('Corners', String(totals.cornerCount)) +
+        chip('Total', totals.grandTotalFt + ' ft', true);
+    }
+    var runCount = state.segments.filter(function (s) { return s.kind === 'run'; }).length;
+    return chip('Gutter runs', String(runCount)) +
+      chip('Downspouts', String(totals.downspoutCount)) +
+      chip('Corners', String(totals.cornerCount));
+  }
+
+  function exportDiagramPng() {
+    var svgMarkup = buildDiagramSvg();
+    var svgBlob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' });
+    var url = URL.createObjectURL(svgBlob);
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.onload = function () {
+        var canvas = document.createElement('canvas');
+        var targetW = 900;
+        var ratio = img.naturalWidth ? img.naturalHeight / img.naturalWidth : 1;
+        canvas.width = targetW;
+        canvas.height = Math.max(200, Math.round(targetW * ratio));
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(function (blob) {
+          if (!blob) { reject(new Error('Could not render diagram image')); return; }
+          resolve(blob);
+        }, 'image/png');
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Could not render diagram image')); };
+      img.src = url;
+    });
+  }
+
+  function renderRole() {
+    stageEl.innerHTML =
+      '<div class="gsv-intro">' +
+      '<h1>Help us measure your gutters</h1>' +
+      '<p>Takes about 2 minutes. Snap a few photos, short videos, or audio notes while you walk the roofline and we will put together a diagram and an accurate quote.</p>' +
+      '</div>' +
+      '<div class="gsv-role-grid">' +
+      '<button type="button" class="gsv-role-btn" data-role="technician">' +
+      '<span class="gsv-role-title">I am the technician</span>' +
+      '<span class="gsv-role-desc">I have a tape measure and I am on site now.</span>' +
+      '</button>' +
+      '<button type="button" class="gsv-role-btn" data-role="homeowner">' +
+      '<span class="gsv-role-title">I am the homeowner</span>' +
+      '<span class="gsv-role-desc">I will just walk around with my phone - no measuring needed.</span>' +
+      '</button>' +
+      '</div>';
+
+    stageEl.querySelectorAll('[data-role]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        state.mode = btn.getAttribute('data-role');
+        state.step = 'contact';
+        persistSession();
+        render();
+      });
+    });
+  }
+
+  function renderContact() {
+    stageEl.innerHTML =
+      '<h2 class="gsv-step-title">Your contact info</h2>' +
+      '<p class="gsv-step-sub">So we can follow up about your quote. Just the basics - nothing like the full quote form.</p>' +
+      '<div class="gsv-fields">' +
+      '<label class="gsv-field"><span>Name</span><input class="gsv-input" id="gsv-c-name" type="text" autocomplete="name" value="' +
+      escapeHtml(state.contact.name) + '"></label>' +
+      '<label class="gsv-field"><span>Phone</span><input class="gsv-input" id="gsv-c-phone" type="tel" autocomplete="tel" inputmode="tel" value="' +
+      escapeHtml(state.contact.phone) + '"></label>' +
+      '<label class="gsv-field"><span>Email</span><input class="gsv-input" id="gsv-c-email" type="email" autocomplete="email" inputmode="email" value="' +
+      escapeHtml(state.contact.email) + '"></label>' +
+      '</div>' +
+      '<p class="gsv-error" id="gsv-contact-error" hidden></p>' +
+      '<div class="gsv-actions">' +
+      '<button type="button" class="gsv-btn gsv-btn-ghost" id="gsv-contact-back">Back</button>' +
+      '<button type="button" class="gsv-btn gsv-btn-primary" id="gsv-contact-next">Continue</button>' +
+      '</div>';
+
+    var nameInput = document.getElementById('gsv-c-name');
+    var phoneInput = document.getElementById('gsv-c-phone');
+    var emailInput = document.getElementById('gsv-c-email');
+    nameInput.addEventListener('input', function () { state.contact.name = nameInput.value; });
+    phoneInput.addEventListener('input', function () { state.contact.phone = phoneInput.value; });
+    emailInput.addEventListener('input', function () { state.contact.email = emailInput.value; });
+
+    document.getElementById('gsv-contact-back').addEventListener('click', function () {
+      state.step = 'role';
+      persistSession();
+      render();
+    });
+    document.getElementById('gsv-contact-next').addEventListener('click', function () {
+      var errEl = document.getElementById('gsv-contact-error');
+      if (!state.contact.name.trim() || !state.contact.phone.trim() || !EMAIL_RE.test(state.contact.email.trim())) {
+        errEl.textContent = 'Please enter your name, phone, and a valid email.';
+        errEl.hidden = false;
+        return;
+      }
+      errEl.hidden = true;
+      state.step = 'builder';
+      persistSession();
+      render();
+    });
+  }
+
+  function renderThumb(assetId) {
+    var a = assets.get(assetId);
+    if (!a) return '';
+    var inner = a.kind === 'photo' ? ('<img src="' + a.objectUrl + '" alt="">') :
+      ('<span>' + (a.kind === 'video' ? '&#127916;' : '&#127908;') + '</span>');
+    return '<span class="gsv-thumb" data-asset-id="' + a.id + '">' + inner +
+      '<button type="button" class="gsv-thumb-del" data-del-asset="' + a.id + '" aria-label="Delete media">&times;</button></span>';
+  }
+
+  function renderSegmentRow(seg, index) {
+    var icon = seg.kind === 'downspout' ? '&#8595;' : '&#8594;';
+    var title;
+    if (seg.kind === 'downspout') {
+      title = 'Downspout ' + index + (state.mode === 'technician' ?
+        ' (' + (seg.dropFt != null ? seg.dropFt : DEFAULT_DOWNSPOUT_DROP_FT) + ' ft)' : '');
+    } else {
+      title = 'Run ' + index + (seg.lengthFt != null ? ': ' + seg.lengthFt + ' ft' : '');
+    }
+    var mediaHtml = seg.media.map(renderThumb).join('');
+    return '<li class="gsv-seg-row" data-seg-id="' + seg.id + '">' +
+      '<div class="gsv-seg-main">' +
+      '<span class="gsv-seg-icon">' + icon + '</span>' +
+      '<span class="gsv-seg-title">' + escapeHtml(title) + '</span>' +
+      '<button type="button" class="gsv-seg-del" data-del-seg="' + seg.id + '" aria-label="Remove">&times;</button>' +
+      '</div>' +
+      '<div class="gsv-seg-media">' + mediaHtml +
+      '<button type="button" class="gsv-seg-add-media" data-capture-for="' + seg.id + '">+ Photo/Video/Audio</button>' +
+      '</div></li>';
+  }
+
+  function renderComposer() {
+    var c = state.composer;
+    if (!c) return '';
+    if (c.kind === 'downspout') {
+      return '<div class="gsv-composer">' +
+        '<p class="gsv-composer-title">Add a downspout</p>' +
+        (state.mode === 'technician' ?
+          '<label class="gsv-field"><span>Downspout length (ft)</span>' +
+          '<input class="gsv-input" id="gsv-composer-drop" type="number" inputmode="decimal" min="0" step="0.5" placeholder="' +
+          DEFAULT_DOWNSPOUT_DROP_FT + '" value="' + escapeHtml(c.dropFt || '') + '"></label>' : '') +
+        '<div class="gsv-composer-actions">' +
+        '<button type="button" class="gsv-btn gsv-btn-ghost" id="gsv-composer-cancel">Cancel</button>' +
+        '<button type="button" class="gsv-btn gsv-btn-primary" id="gsv-composer-confirm">Add downspout</button>' +
+        '</div></div>';
+    }
+
+    var isFirstRun = !state.segments.some(function (s) { return s.kind === 'run'; });
+    var dirButtons;
+    if (isFirstRun) {
+      var compassLabels = { E: 'Starts going right &#8594;', S: 'Starts going down &#8595;', W: 'Starts going left &#8592;', N: 'Starts going up &#8593;' };
+      dirButtons = ['E', 'S', 'W', 'N'].map(function (d) {
+        return '<button type="button" class="gsv-dir-btn' + (c.turn === d ? ' is-selected' : '') + '" data-turn="' + d + '">' +
+          compassLabels[d] + '</button>';
+      }).join('');
+    } else {
+      dirButtons = [['left', 'Turn left'], ['straight', 'Continue straight'], ['right', 'Turn right']].map(function (pair) {
+        return '<button type="button" class="gsv-dir-btn' + (c.turn === pair[0] ? ' is-selected' : '') + '" data-turn="' +
+          pair[0] + '">' + pair[1] + '</button>';
+      }).join('');
+    }
+
+    return '<div class="gsv-composer">' +
+      '<p class="gsv-composer-title">Add a gutter run</p>' +
+      '<div class="gsv-dir-row">' + dirButtons + '</div>' +
+      (state.mode === 'technician' ?
+        '<label class="gsv-field"><span>Run length (ft)</span>' +
+        '<input class="gsv-input" id="gsv-composer-length" type="number" inputmode="decimal" min="0" step="0.5" placeholder="e.g. 33" value="' +
+        escapeHtml(c.lengthFt || '') + '"></label>' :
+        '<p class="gsv-composer-hint">No need to measure - just mark the run. We will confirm exact lengths on site.</p>') +
+      '<div class="gsv-composer-actions">' +
+      '<button type="button" class="gsv-btn gsv-btn-ghost" id="gsv-composer-cancel">Cancel</button>' +
+      '<button type="button" class="gsv-btn gsv-btn-primary" id="gsv-composer-confirm" disabled>Add run</button>' +
+      '</div></div>';
+  }
+
+  function showBuilderError(message) {
+    var el = document.getElementById('gsv-builder-error');
+    if (!el) return;
+    el.textContent = message;
+    el.hidden = false;
+  }
+
+  function renderBuilder() {
+    var totals = computeTotals();
+    var svg = buildDiagramSvg();
+    var runCounter = 0, dsCounter = 0;
+    var rowsHtml = state.segments.map(function (seg) {
+      if (seg.kind === 'run') runCounter++; else dsCounter++;
+      return renderSegmentRow(seg, seg.kind === 'run' ? runCounter : dsCounter);
+    }).join('');
+
+    stageEl.innerHTML =
+      '<div class="gsv-builder">' +
+      '<div class="gsv-diagram-pane">' + svg +
+      '<div class="gsv-totals">' + renderTotalsHtml(totals) + '</div>' +
+      (state.mode === 'homeowner' ? '<p class="gsv-approx-note">Approximate layout - exact lengths confirmed on site.</p>' : '') +
+      '</div>' +
+      '<div class="gsv-builder-side">' +
+      '<div class="gsv-general">' +
+      '<p class="gsv-section-label">General photos / video / notes</p>' +
+      '<div class="gsv-seg-media">' + state.generalMedia.map(renderThumb).join('') +
+      '<button type="button" class="gsv-seg-add-media" id="gsv-add-general">+ Photo/Video/Audio</button>' +
+      '</div></div>' +
+      '<p class="gsv-section-label">Roofline (in the order you walked it)</p>' +
+      '<ul class="gsv-seg-list">' + rowsHtml + '</ul>' +
+      (state.composer ? renderComposer() :
+        '<div class="gsv-add-buttons">' +
+        '<button type="button" class="gsv-btn gsv-btn-outline" id="gsv-open-run">+ Gutter run</button>' +
+        '<button type="button" class="gsv-btn gsv-btn-outline" id="gsv-open-downspout">+ Downspout</button>' +
+        '</div>') +
+      '</div></div>' +
+      '<p class="gsv-error" id="gsv-builder-error" hidden></p>' +
+      '<div class="gsv-actions">' +
+      '<button type="button" class="gsv-btn gsv-btn-ghost" id="gsv-builder-back">Back</button>' +
+      '<button type="button" class="gsv-btn gsv-btn-primary" id="gsv-builder-next">Review</button>' +
+      '</div>';
+
+    bindBuilderEvents();
+  }
+
+  function bindBuilderEvents() {
+    document.getElementById('gsv-builder-back').addEventListener('click', function () {
+      state.step = 'contact';
+      persistSession();
+      render();
+    });
+    document.getElementById('gsv-builder-next').addEventListener('click', function () {
+      if (!state.segments.length) {
+        showBuilderError('Add at least one gutter run before continuing.');
+        return;
+      }
+      state.step = 'review';
+      persistSession();
+      render();
+    });
+
+    stageEl.querySelectorAll('[data-del-seg]').forEach(function (btn) {
+      btn.addEventListener('click', function () { removeSegment(btn.getAttribute('data-del-seg')); });
+    });
+    stageEl.querySelectorAll('[data-del-asset]').forEach(function (btn) {
+      btn.addEventListener('click', function (ev) { ev.stopPropagation(); removeAsset(btn.getAttribute('data-del-asset')); });
+    });
+    stageEl.querySelectorAll('[data-capture-for]').forEach(function (btn) {
+      btn.addEventListener('click', function () { openCapture(btn.getAttribute('data-capture-for')); });
+    });
+    var addGeneralBtn = document.getElementById('gsv-add-general');
+    if (addGeneralBtn) addGeneralBtn.addEventListener('click', function () { openCapture('general'); });
+
+    var openRunBtn = document.getElementById('gsv-open-run');
+    if (openRunBtn) openRunBtn.addEventListener('click', function () {
+      state.composer = { kind: 'run', turn: null, lengthFt: '' };
+      renderBuilder();
+    });
+    var openDsBtn = document.getElementById('gsv-open-downspout');
+    if (openDsBtn) openDsBtn.addEventListener('click', function () {
+      state.composer = { kind: 'downspout', dropFt: '' };
+      renderBuilder();
+    });
+
+    bindComposerEvents();
+  }
+
+  function bindComposerEvents() {
+    if (!state.composer) return;
+    var cancelBtn = document.getElementById('gsv-composer-cancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', function () { state.composer = null; renderBuilder(); });
+
+    stageEl.querySelectorAll('.gsv-dir-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        state.composer.turn = btn.getAttribute('data-turn');
+        stageEl.querySelectorAll('.gsv-dir-btn').forEach(function (b) { b.classList.toggle('is-selected', b === btn); });
+        updateComposerConfirm();
+      });
+    });
+
+    var lengthInput = document.getElementById('gsv-composer-length');
+    if (lengthInput) lengthInput.addEventListener('input', function () {
+      state.composer.lengthFt = lengthInput.value;
+      updateComposerConfirm();
+    });
+    var dropInput = document.getElementById('gsv-composer-drop');
+    if (dropInput) dropInput.addEventListener('input', function () { state.composer.dropFt = dropInput.value; });
+
+    var confirmBtn = document.getElementById('gsv-composer-confirm');
+    if (confirmBtn) confirmBtn.addEventListener('click', confirmComposer);
+    updateComposerConfirm();
+  }
+
+  function updateComposerConfirm() {
+    var confirmBtn = document.getElementById('gsv-composer-confirm');
+    if (!confirmBtn || !state.composer) return;
+    if (state.composer.kind === 'downspout') { confirmBtn.disabled = false; return; }
+    var hasDir = !!state.composer.turn;
+    var needsLength = state.mode === 'technician';
+    var lengthOk = !needsLength || parseFloat(state.composer.lengthFt) > 0;
+    confirmBtn.disabled = !(hasDir && lengthOk);
+  }
+
+  function confirmComposer() {
+    var c = state.composer;
+    if (c.kind === 'run') {
+      state.segments.push({
+        id: uid('seg'), kind: 'run', turn: c.turn,
+        lengthFt: state.mode === 'technician' ? parseFloat(c.lengthFt) : null,
+        media: []
+      });
+    } else {
+      state.segments.push({
+        id: uid('seg'), kind: 'downspout',
+        dropFt: state.mode === 'technician' && c.dropFt ? parseFloat(c.dropFt) : null,
+        media: []
+      });
+    }
+    state.composer = null;
+    persistSession();
+    renderBuilder();
+  }
+
+  function deleteAssetEverywhere(assetId) {
+    var a = assets.get(assetId);
+    if (a && a.objectUrl) URL.revokeObjectURL(a.objectUrl);
+    assets.delete(assetId);
+    idbDelete('assets', assetId);
+  }
+
+  function removeSegment(id) {
+    var seg = state.segments.find(function (s) { return s.id === id; });
+    if (!seg) return;
+    seg.media.slice().forEach(deleteAssetEverywhere);
+    state.segments = state.segments.filter(function (s) { return s.id !== id; });
+    persistSession();
+    renderBuilder();
+  }
+
+  function removeAsset(assetId) {
+    deleteAssetEverywhere(assetId);
+    state.segments.forEach(function (seg) { seg.media = seg.media.filter(function (a) { return a !== assetId; }); });
+    state.generalMedia = state.generalMedia.filter(function (a) { return a !== assetId; });
+    persistSession();
+    renderBuilder();
+  }
+
+  function addAsset(kind, blob, targetId) {
+    var ext = kind === 'photo' ? 'jpg' :
+      (blob.type && blob.type.indexOf('mp4') !== -1 ? (kind === 'video' ? 'mp4' : 'm4a') : 'webm');
+    var asset = {
+      id: uid('asset'),
+      segmentId: targetId,
+      kind: kind,
+      blob: blob,
+      mimeType: blob.type || 'application/octet-stream',
+      fileName: kind + '-' + Date.now() + '.' + ext,
+      objectUrl: URL.createObjectURL(blob),
+      status: 'local'
+    };
+    assets.set(asset.id, asset);
+    idbPut('assets', serializableAsset(asset));
+    if (targetId === 'general') state.generalMedia.push(asset.id);
+    else {
+      var seg = state.segments.find(function (s) { return s.id === targetId; });
+      if (seg) seg.media.push(asset.id);
+    }
+    persistSession();
+    return asset;
+  }
+
+  function openCapture(targetId) {
+    capture.targetId = targetId;
+    capture.pending = null;
+    captureErrorEl.hidden = true;
+    capReviewEl.hidden = true;
+    capStopBtn.hidden = true;
+    captureTimerEl.hidden = true;
+    capturePhotoPreviewEl.hidden = true;
+    captureAudioPreviewEl.hidden = true;
+    captureVideoEl.hidden = false;
+    captureVideoEl.controls = false;
+    captureVideoEl.muted = true;
+    captureVideoEl.removeAttribute('src');
+    capBarEl.hidden = false;
+    captureEl.hidden = false;
+    document.body.style.overflow = 'hidden';
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      captureErrorEl.textContent = 'Your browser does not support camera/microphone capture. Try a recent version of Chrome or Safari.';
+      captureErrorEl.hidden = false;
+      capBarEl.hidden = true;
+      return;
+    }
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: true })
+      .then(function (stream) {
+        capture.stream = stream;
+        captureVideoEl.srcObject = stream;
+      })
+      .catch(function (err) {
+        console.error(err);
+        captureErrorEl.textContent = 'Could not access camera/microphone (' + (err && err.message ? err.message : err) +
+          '). Check your browser permissions.';
+        captureErrorEl.hidden = false;
+        capBarEl.hidden = true;
+      });
+  }
+
+  function closeCapture() {
+    if (capture.recorder && capture.recorder.state !== 'inactive') {
+      try { capture.recorder.stop(); } catch (err) { /* ignore */ }
+    }
+    stopTimer();
+    if (capture.stream) {
+      capture.stream.getTracks().forEach(function (t) { t.stop(); });
+      capture.stream = null;
+    }
+    if (capture.pending && capture.pending.objectUrl) URL.revokeObjectURL(capture.pending.objectUrl);
+    capture.pending = null;
+    capture.targetId = null;
+    captureVideoEl.srcObject = null;
+    captureEl.hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  function takePhoto() {
+    if (!capture.stream) return;
+    var track = capture.stream.getVideoTracks()[0];
+    if (!track) {
+      captureErrorEl.textContent = 'No camera available for photos.';
+      captureErrorEl.hidden = false;
+      return;
+    }
+    var settings = track.getSettings ? track.getSettings() : {};
+    var w = settings.width || captureVideoEl.videoWidth || 1280;
+    var h = settings.height || captureVideoEl.videoHeight || 720;
+    captureCanvasEl.width = w;
+    captureCanvasEl.height = h;
+    captureCanvasEl.getContext('2d').drawImage(captureVideoEl, 0, 0, w, h);
+    captureCanvasEl.toBlob(function (blob) {
+      if (blob) showPending('photo', blob);
+    }, 'image/jpeg', 0.85);
+  }
+
+  function startRecording(kind) {
+    if (!capture.stream) return;
+    var mimeType, recStream;
+    if (kind === 'video') {
+      mimeType = pickMimeType(VIDEO_MIME_CANDIDATES);
+      recStream = capture.stream;
+    } else {
+      mimeType = pickMimeType(AUDIO_MIME_CANDIDATES);
+      recStream = new MediaStream(capture.stream.getAudioTracks());
+    }
+    try {
+      capture.recorder = mimeType ? new MediaRecorder(recStream, { mimeType: mimeType }) : new MediaRecorder(recStream);
+    } catch (err) {
+      captureErrorEl.textContent = 'Recording is not supported in this browser.';
+      captureErrorEl.hidden = false;
+      return;
+    }
+    capture.recordKind = kind;
+    capture.recordedChunks = [];
+    capture.recorder.ondataavailable = function (ev) {
+      if (ev.data && ev.data.size) capture.recordedChunks.push(ev.data);
+    };
+    capture.recorder.onstop = function () {
+      var blob = new Blob(capture.recordedChunks, { type: mimeType || (kind === 'video' ? 'video/webm' : 'audio/webm') });
+      capture.recordedChunks = [];
+      showPending(kind, blob);
+    };
+    capture.recorder.start();
+    capture.startedAt = Date.now();
+    capBarEl.hidden = true;
+    capStopBtn.hidden = false;
+    captureTimerEl.hidden = false;
+    capture.timerId = setInterval(updateTimer, 200);
+    updateTimer();
+  }
+
+  function updateTimer() {
+    var elapsed = (Date.now() - capture.startedAt) / 1000;
+    if (elapsed >= MAX_VIDEO_SECONDS) {
+      captureTimerEl.textContent = formatSeconds(MAX_VIDEO_SECONDS) + ' / ' + formatSeconds(MAX_VIDEO_SECONDS);
+      stopRecording();
+      return;
+    }
+    captureTimerEl.textContent = formatSeconds(elapsed) + ' / ' + formatSeconds(MAX_VIDEO_SECONDS);
+  }
+
+  function stopRecording() {
+    stopTimer();
+    if (capture.recorder && capture.recorder.state !== 'inactive') capture.recorder.stop();
+    capStopBtn.hidden = true;
+  }
+
+  function stopTimer() {
+    if (capture.timerId) { clearInterval(capture.timerId); capture.timerId = null; }
+  }
+
+  function showPending(kind, blob) {
+    var objectUrl = URL.createObjectURL(blob);
+    capture.pending = { kind: kind, blob: blob, objectUrl: objectUrl };
+    captureTimerEl.hidden = true;
+    if (kind === 'photo') {
+      captureVideoEl.hidden = true;
+      capturePhotoPreviewEl.src = objectUrl;
+      capturePhotoPreviewEl.hidden = false;
+    } else if (kind === 'video') {
+      captureVideoEl.hidden = false;
+      captureVideoEl.srcObject = null;
+      captureVideoEl.src = objectUrl;
+      captureVideoEl.controls = true;
+      captureVideoEl.muted = false;
+      captureVideoEl.play().catch(function () { /* user can press play */ });
+    } else {
+      captureVideoEl.hidden = true;
+      captureAudioPreviewEl.src = objectUrl;
+      captureAudioPreviewEl.hidden = false;
+    }
+    capBarEl.hidden = true;
+    capReviewEl.hidden = false;
+  }
+
+  function retakePending() {
+    if (capture.pending && capture.pending.objectUrl) URL.revokeObjectURL(capture.pending.objectUrl);
+    capture.pending = null;
+    capReviewEl.hidden = true;
+    capturePhotoPreviewEl.hidden = true;
+    captureAudioPreviewEl.hidden = true;
+    captureVideoEl.hidden = false;
+    captureVideoEl.removeAttribute('src');
+    captureVideoEl.controls = false;
+    captureVideoEl.muted = true;
+    captureVideoEl.srcObject = capture.stream;
+    capBarEl.hidden = false;
+  }
+
+  function usePending() {
+    if (!capture.pending) return;
+    var targetId = capture.targetId;
+    addAsset(capture.pending.kind, capture.pending.blob, targetId);
+    URL.revokeObjectURL(capture.pending.objectUrl);
+    capture.pending = null;
+    closeCapture();
+    render();
+  }
+
+  capPhotoBtn.addEventListener('click', takePhoto);
+  capVideoBtn.addEventListener('click', function () { startRecording('video'); });
+  capAudioBtn.addEventListener('click', function () { startRecording('audio'); });
+  capStopBtn.addEventListener('click', stopRecording);
+  capRetakeBtn.addEventListener('click', retakePending);
+  capUseBtn.addEventListener('click', usePending);
+  capCloseBtn.addEventListener('click', closeCapture);
+
+  function mediaCount() {
+    var n = state.generalMedia.length;
+    state.segments.forEach(function (s) { n += s.media.length; });
+    return n;
+  }
+
+  function renderReview() {
+    var totals = computeTotals();
+    var svg = buildDiagramSvg();
+    stageEl.innerHTML =
+      '<div class="gsv-review">' +
+      '<div class="gsv-diagram-pane">' + svg + '<div class="gsv-totals">' + renderTotalsHtml(totals) + '</div></div>' +
+      '<div class="gsv-review-side">' +
+      '<p><strong>' + escapeHtml(state.contact.name) + '</strong><br>' +
+      escapeHtml(state.contact.phone) + ' &middot; ' + escapeHtml(state.contact.email) + '</p>' +
+      '<label class="gsv-field"><span>Anything else we should know? (optional)</span>' +
+      '<textarea class="gsv-input" id="gsv-notes" rows="3" placeholder="e.g. second story over the garage, large oak tree overhanging the back...">' +
+      escapeHtml(state.notes) + '</textarea></label>' +
+      '<p class="gsv-review-count">' + mediaCount() + ' photo/video/audio file(s) ready to upload.</p>' +
+      '</div></div>' +
+      '<p class="gsv-error" id="gsv-review-error" hidden></p>' +
+      '<div class="gsv-actions">' +
+      '<button type="button" class="gsv-btn gsv-btn-ghost" id="gsv-review-back">Back</button>' +
+      '<button type="button" class="gsv-btn gsv-btn-primary" id="gsv-review-submit">Submit Survey</button>' +
+      '</div>';
+
+    document.getElementById('gsv-notes').addEventListener('input', function (ev) { state.notes = ev.target.value; });
+    document.getElementById('gsv-review-back').addEventListener('click', function () {
+      state.step = 'builder';
+      persistSession();
+      render();
+    });
+    document.getElementById('gsv-review-submit').addEventListener('click', startSubmit);
+  }
+
+  function allAssetIds() {
+    var ids = state.generalMedia.slice();
+    state.segments.forEach(function (s) { ids = ids.concat(s.media); });
+    return ids;
+  }
+
+  function ensureFolderName() {
+    if (!state.folderName) {
+      var datePart = new Date().toISOString().slice(0, 10);
+      var raw = (state.contact.name || 'Customer') + ' - ' + (state.contact.phone || 'no-phone') + ' - ' +
+        datePart + ' - ' + state.sessionId.slice(-6);
+      state.folderName = raw.replace(/[\\/:*?"<>|]/g, '-').slice(0, 120);
+      persistSession();
+    }
+    return state.folderName;
+  }
+
+  function uploadAsset(asset, folderName) {
+    return blobToBase64(asset.blob).then(function (base64) {
+      return fetch(window.APP_CONFIG.API_BASE_URL + '/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'uploadAsset',
+          module: 'Survey',
+          folderName: folderName,
+          file: { fileName: asset.fileName, mimeType: asset.mimeType, data: base64 }
+        })
+      });
+    }).then(function (response) {
+      return response.json().catch(function () { return { ok: false, error: 'Invalid server response' }; });
+    }).then(function (data) {
+      if (!data.ok) throw new Error(data.error || 'Upload failed');
+      return data.url;
+    });
+  }
+
+  function renderUploading() {
+    var ids = allAssetIds();
+    var doneCount = ids.filter(function (id) { var a = assets.get(id); return a && a.status === 'uploaded'; }).length;
+    var errorIds = ids.filter(function (id) { var a = assets.get(id); return a && a.status === 'error'; });
+    var pct = ids.length ? Math.round((doneCount / ids.length) * 100) : 100;
+    var allUploaded = doneCount === ids.length;
+
+    var extra = '';
+    if (errorIds.length) {
+      extra = '<p class="gsv-error">' + errorIds.length + ' file(s) failed to upload. Check your connection and try again.</p>' +
+        '<button type="button" class="gsv-btn gsv-btn-primary" id="gsv-retry-upload">Retry failed uploads</button>';
+    } else if (allUploaded && state.finalizeError) {
+      extra = '<p class="gsv-error">' + escapeHtml(state.finalizeError) + '</p>' +
+        '<button type="button" class="gsv-btn gsv-btn-primary" id="gsv-retry-finalize">Try again</button>';
+    } else if (allUploaded) {
+      extra = '<p>Finishing up&hellip;</p>';
+    }
+
+    stageEl.innerHTML =
+      '<div class="gsv-uploading">' +
+      '<p>Uploading ' + doneCount + ' of ' + ids.length + ' file(s)&hellip;</p>' +
+      '<div class="gsv-progress"><div class="gsv-progress-bar" style="width:' + pct + '%"></div></div>' +
+      extra +
+      '</div>';
+
+    var retryBtn = document.getElementById('gsv-retry-upload');
+    if (retryBtn) retryBtn.addEventListener('click', runUploadQueue);
+    var retryFinalizeBtn = document.getElementById('gsv-retry-finalize');
+    if (retryFinalizeBtn) retryFinalizeBtn.addEventListener('click', function () {
+      state.finalizeError = null;
+      finalizeSubmission();
+    });
+  }
+
+  function runUploadQueue() {
+    var folderName = ensureFolderName();
+    var ids = allAssetIds().filter(function (id) {
+      var a = assets.get(id);
+      return a && a.status !== 'uploaded';
+    });
+
+    function next(i) {
+      if (i >= ids.length) {
+        var anyError = ids.some(function (id) { return assets.get(id).status === 'error'; });
+        if (!anyError) finalizeSubmission();
+        return;
+      }
+      var asset = assets.get(ids[i]);
+      asset.status = 'uploading';
+      renderUploading();
+      uploadAsset(asset, folderName).then(function (url) {
+        asset.status = 'uploaded';
+        asset.driveUrl = url;
+        idbPut('assets', serializableAsset(asset));
+        renderUploading();
+        next(i + 1);
+      }).catch(function (err) {
+        console.error(err);
+        asset.status = 'error';
+        asset.errorMessage = String(err && err.message || err);
+        idbPut('assets', serializableAsset(asset));
+        renderUploading();
+        next(i + 1);
+      });
+    }
+    next(0);
+  }
+
+  function finalizeSubmission() {
+    var totals = computeTotals();
+    var folderName = ensureFolderName();
+
+    exportDiagramPng()
+      .then(function (blob) { return uploadAsset({ fileName: 'diagram.png', mimeType: 'image/png', blob: blob }, folderName); })
+      .catch(function (err) { console.error('Diagram export failed, continuing without it', err); return ''; })
+      .then(function (diagramUrl) {
+        var segmentsForExport = state.segments.map(function (s) {
+          return {
+            kind: s.kind,
+            turn: s.turn || null,
+            lengthFt: s.lengthFt != null ? s.lengthFt : null,
+            dropFt: s.dropFt != null ? s.dropFt : null,
+            mediaUrls: s.media.map(function (id) { var a = assets.get(id); return a ? a.driveUrl : null; }).filter(Boolean)
+          };
+        });
+        var generalUrls = state.generalMedia.map(function (id) { var a = assets.get(id); return a ? a.driveUrl : null; }).filter(Boolean);
+
+        var fields = {
+          mode: state.mode,
+          contactName: state.contact.name,
+          contactPhone: state.contact.phone,
+          contactEmail: state.contact.email,
+          totalGutterFt: totals.haveAllLengths ? totals.totalRunFt : '',
+          downspoutCount: totals.downspoutCount,
+          totalDownspoutFt: totals.haveAllLengths ? totals.downspoutFt : '',
+          cornerCount: totals.cornerCount,
+          grandTotalFt: totals.haveAllLengths ? totals.grandTotalFt : '',
+          estimateType: totals.haveAllLengths ? 'Measured' : 'Preliminary (pending technician confirmation)',
+          segmentCount: state.segments.length,
+          mediaCount: mediaCount(),
+          diagramUrl: diagramUrl || '',
+          notes: state.notes || '',
+          segmentsJson: JSON.stringify(segmentsForExport),
+          generalMediaUrls: JSON.stringify(generalUrls)
+        };
+
+        return window.RainGuard.submitForm('Survey', 'gutter-survey', fields, { sheetName: 'GutterSurvey' });
+      })
+      .then(function () { return clearSession(); })
+      .then(function () {
+        state.step = 'done';
+        render();
+      })
+      .catch(function (err) {
+        console.error(err);
+        state.finalizeError = String(err && err.message || err);
+        renderUploading();
+      });
+  }
+
+  function startSubmit() {
+    state.step = 'uploading';
+    state.finalizeError = null;
+    persistSession();
+    render();
+    runUploadQueue();
+  }
+
+  function render() {
+    if (state.step === 'done') {
+      cardEl.hidden = true;
+      successEl.hidden = false;
+      return;
+    }
+    cardEl.hidden = false;
+    successEl.hidden = true;
+    startOverBtn.hidden = state.step === 'role';
+    switch (state.step) {
+      case 'contact': renderContact(); break;
+      case 'builder': renderBuilder(); break;
+      case 'review': renderReview(); break;
+      case 'uploading': renderUploading(); break;
+      default: renderRole();
+    }
+  }
+
+  startOverBtn.addEventListener('click', function () {
+    if (!window.confirm('Start a new survey? This will discard any photos/videos you have not submitted yet.')) return;
+    clearSession().then(function () {
+      state.sessionId = uid('gsv');
+      state.step = 'role';
+      state.mode = null;
+      state.contact = { name: '', phone: '', email: '' };
+      state.segments = [];
+      state.generalMedia = [];
+      state.notes = '';
+      state.composer = null;
+      state.folderName = null;
+      state.finalizeError = null;
+      render();
+    });
+  });
+
+  init();
+})();
+</script>

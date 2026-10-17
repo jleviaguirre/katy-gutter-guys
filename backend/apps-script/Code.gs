@@ -62,6 +62,16 @@ function doGet(e) {
  * auto-created with dynamic headers the same way "Submissions" is).
  * Any field whose value looks like { fileName, mimeType, data (base64) } is
  * uploaded to Drive and replaced with the resulting file URL before saving.
+ * Pass `folderName` to nest those uploads inside a named subfolder of
+ * `DRIVE_FOLDER_ID` (created on first use, reused after that) instead of
+ * dropping them in the root folder - e.g. one subfolder per customer visit.
+ *
+ * POST /exec with { action: "uploadAsset", module, folderName, file }
+ * Uploads a single file to Drive (optionally nested under `folderName`) and
+ * returns { ok: true, url } WITHOUT appending a sheet row. Used by modules
+ * that capture several photos/videos/audio clips per visit (e.g. the
+ * Gutter Survey module) so each asset can be uploaded as its own small
+ * request/retry instead of bundling everything into one large payload.
  */
 function doPost(e) {
   try {
@@ -69,6 +79,11 @@ function doPost(e) {
       throw new Error('Missing request body');
     }
     var body = JSON.parse(e.postData.contents);
+
+    if (body.action === 'uploadAsset') {
+      return handleUploadAsset_(body);
+    }
+
     var module = body.module || 'unknown';
     var formId = body.formId || 'default';
     var fields = body.fields || {};
@@ -78,7 +93,7 @@ function doPost(e) {
     Object.keys(fields).forEach(function (key) {
       var value = fields[key];
       if (value && typeof value === 'object' && value.data && value.fileName) {
-        processedFields[key] = saveFileToDrive_(value, module) || '(upload failed)';
+        processedFields[key] = saveFileToDrive_(value, module, body.folderName) || '(upload failed)';
       } else {
         processedFields[key] = value;
       }
@@ -99,6 +114,23 @@ function doPost(e) {
   } catch (err) {
     return jsonOutput_({ ok: false, error: String(err && err.message || err) });
   }
+}
+
+/**
+ * Uploads one file to Drive (see doPost's `action: "uploadAsset"` docs) and
+ * returns its URL without touching the Sheet. Errors propagate to doPost's
+ * try/catch so the caller gets a normal { ok: false, error } response.
+ */
+function handleUploadAsset_(body) {
+  var file = body.file;
+  if (!file || !file.data || !file.fileName) {
+    throw new Error('Missing file data for upload');
+  }
+  var url = saveFileToDrive_(file, body.module, body.folderName);
+  if (!url) {
+    throw new Error('DRIVE_FOLDER_ID is not configured; cannot upload files.');
+  }
+  return jsonOutput_({ ok: true, url: url });
 }
 
 /**
@@ -255,12 +287,16 @@ function appendObjectAsRow_(sheet, obj) {
  * Saves a base64-encoded file to a Drive folder (DRIVE_FOLDER_ID script
  * property). Returns the shareable file URL, or null if no folder is
  * configured.
+ * `folderName`, if given, nests the file inside a subfolder of that name
+ * (created on first use, reused on subsequent calls) instead of the root -
+ * e.g. one subfolder per customer visit for the Gutter Survey module.
  */
-function saveFileToDrive_(fileObj, context) {
-  var folderId = PropertiesService.getScriptProperties().getProperty('DRIVE_FOLDER_ID');
-  if (!folderId) return null;
+function saveFileToDrive_(fileObj, context, folderName) {
+  var rootFolderId = PropertiesService.getScriptProperties().getProperty('DRIVE_FOLDER_ID');
+  if (!rootFolderId) return null;
 
-  var folder = DriveApp.getFolderById(folderId);
+  var rootFolder = DriveApp.getFolderById(rootFolderId);
+  var folder = folderName ? getOrCreateSubfolder_(rootFolder, folderName) : rootFolder;
   var blob = Utilities.newBlob(
     Utilities.base64Decode(fileObj.data),
     fileObj.mimeType || 'application/octet-stream',
@@ -269,6 +305,16 @@ function saveFileToDrive_(fileObj, context) {
   var file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return file.getUrl();
+}
+
+/** Finds (or creates) a subfolder by exact name inside `parentFolder`, so
+ * repeated uploads for the same visit/customer land in one shared folder
+ * instead of creating a new one each time. */
+function getOrCreateSubfolder_(parentFolder, name) {
+  name = String(name || '').trim().slice(0, 120) || 'Untitled';
+  var existing = parentFolder.getFoldersByName(name);
+  if (existing.hasNext()) return existing.next();
+  return parentFolder.createFolder(name);
 }
 
 function jsonOutput_(obj) {

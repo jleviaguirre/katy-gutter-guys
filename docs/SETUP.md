@@ -51,7 +51,9 @@ below.
 4. *(Skip this unless you want file-upload support.)* If a form will upload
    files to Drive, create/pick a Drive folder, copy its ID from the folder's
    URL (`.../drive/folders/<FOLDER_ID>`), and add it as a Script Property
-   named `DRIVE_FOLDER_ID` the same way as step 3.
+   named `DRIVE_FOLDER_ID` the same way as step 3. Uploads can optionally be
+   nested into a subfolder per submission (e.g. one folder per customer
+   visit) - see "Gutter Survey module" below.
 5. **Deploy > New deployment > Web app**:
    - Execute as: **Me**
    - Who has access: **Anyone**
@@ -149,6 +151,86 @@ questions, optional Previous/Next). To use it:
    `<script>` - each entry is either `type: 'choice'` / `'icon-choice'`
    (single-select, auto-advances) or `type: 'input'` (one or more text
    fields with a `validate(value)` function, requires clicking Next/Enter).
+
+## Gutter Survey module (photos/video/audio -> diagram + quote totals)
+
+[`docs/modules/gutter-survey.html`](/docs/modules/gutter-survey.html) lets a
+technician (on site, with a tape measure) or a homeowner (just walking
+around with their phone) capture photos, short videos (up to 30 seconds,
+stoppable anytime), and audio notes while walking the roofline, and turns
+that into a labeled gutter/downspout diagram plus totals (gutter linear
+feet, downspout count/LF, corner count) - a digital version of the
+hand-sketched proposals the business already uses. To use it:
+
+1. Copy the entire contents of that file into the `html` column of a
+   `Modules` row with `module = Survey` (`navLabel` "Photo Survey" or
+   similar, `title`/`order` as you like).
+2. Make sure `DRIVE_FOLDER_ID` is configured (step 4 above) - each visit
+   uploads its photos/videos/audio into its own subfolder, named from the
+   contact's name/phone/date, nested inside that folder.
+3. Submissions land in their own `GutterSurvey` tab (auto-created with
+   dynamic headers): contact info, computed totals, a `diagramUrl` link to
+   a generated PNG diagram, and a `segmentsJson` column with the full
+   per-segment breakdown (direction, length, attached media URLs).
+4. Captured media is kept on the device (IndexedDB) until the visit is
+   submitted, so nothing is lost to a flaky connection or an accidental
+   reload mid-walkaround; each file uploads as its own request (not
+   bundled into one giant payload) with per-file retry on failure.
+5. This module relies on two small additions already present in
+   [`Code.gs`](/backend/apps-script/Code.gs): a `folderName` option on file
+   uploads (nests them in a named subfolder instead of the Drive root) and
+   a `POST { action: "uploadAsset", module, folderName, file }` endpoint
+   that uploads one file and returns its URL without writing a Sheet row.
+   Both are backward compatible - existing forms that don't send
+   `folderName`/`action` behave exactly as before.
+
+## Gutter Sketch module (draw/drag a polygon -> diagram + quote totals)
+
+[`docs/modules/gutter-sketch.html`](/docs/modules/gutter-sketch.html) is a
+second, generic (no technician/homeowner split) way to produce the same
+kind of gutter diagram, aimed at using more of the screen on a phone/tablet:
+instead of typing a direction + length for each run, you draw directly on a
+canvas with your mouse or finger.
+
+1. Copy the entire contents of that file into the `html` column of a
+   `Modules` row with `module = GutterSketch` (`navLabel`/`title`/`order`
+   as you like).
+2. Three modes, switched with the toolbar icons: **Draw** (tap to add
+   points; tap the first point again to close the shape into a polygon),
+   **Select** (tap a point to toggle a downspout there or delete it, or tap
+   a line to type its exact length - the endpoint snaps along the same
+   direction to match), **Edit** (drag a point to reposition it; adjacent
+   segment lengths update live).
+3. It also captures a service address, an optional GPS location (via a
+   "Use my current location" button - never prompted automatically), an
+   optional RFQ number (for linking a sketch back to an earlier quote
+   request), and `submittedBy` (read from `window.RainGuard.currentUser` if
+   your auth sets it - a string, or an object with `name`/`email` - left
+   blank when nobody is logged in).
+4. Submissions land in the **same `GutterSurvey` tab** as
+   `gutter-survey.html` (sheetName is shared on purpose, so both tools feed
+   one list) with the same `segmentsJson`-style structured breakdown.
+5. Only photos are supported here (no video/audio, and no per-segment
+   media - just a single photo gallery for the whole visit) to keep the
+   module small; progress (contact/address/sketch/notes, not photos) is
+   saved to `localStorage` as you go.
+
+### Shared helpers and the Sheet's 50,000-character cell limit
+
+A Google Sheets cell tops out at 50,000 characters, and a sheet-authored
+module's entire `html` column is one cell - so logic reused by more than
+one module belongs in a plain static asset instead of being duplicated in
+every module. [`assets/js/gutter-tools.js`](/assets/js/gutter-tools.js)
+holds that shared logic (`uploadAsset`, `blobToBase64`, geolocation, local
+storage helpers, etc. - exposed as `window.GutterTools`) for the two gutter
+modules above, and is loaded once, globally, by `index.html` (the same way
+`config.js`/`app.js` already are) rather than per-module - a module's own
+inline `<script>` can rely on `window.GutterTools` already being ready by
+the time it runs, with no load-order code of its own to write. If you add
+another module that needs the same kind of helpers, reuse this file (or add
+to it) instead of copy-pasting logic into the Sheet cell; keep an eye on
+your module's own character count (e.g. "Copy to clipboard" the cell
+content and check its length) if it grows a lot of module-specific markup.
 
 ## Fixed site header
 

@@ -1,0 +1,721 @@
+<!--
+  Gutter Sketch module - a canvas-based roofline sketch tool: Draw mode taps
+  in new points, Select mode taps a point/segment to toggle a downspout or
+  type an exact length, Edit mode drags a point to resize. Works with mouse
+  or touch. Attach site photos, then submit.
+
+  Paste this ENTIRE block into the "html" column of the Modules sheet, on a
+  row with module = GutterSketch (title/navLabel/order as usual). Depends on
+  the shared helpers in window.GutterTools (/assets/js/gutter-tools.js),
+  loaded once, globally, by index.html (same as app.js/config.js) - this
+  keeps this module's own code well under the Sheet's
+  50,000-character-per-cell limit - see /docs/SETUP.md. Submissions land in
+  the same "GutterSurvey" tab used by docs/modules/gutter-survey.html
+  (sheetName is shared on purpose).
+
+  "Submitted by" is read from window.RainGuard.currentUser (a string, or an
+  object with name/email) if your auth sets it - left blank otherwise.
+-->
+<section class="gks" id="gks-root">
+  <div class="gks-card" id="gks-card">
+    <button type="button" class="gks-reset" id="gks-reset" hidden>Start over</button>
+    <div id="gks-stage"></div>
+  </div>
+  <div class="gks-success" id="gks-success" hidden>
+    <span class="gks-success-icon">&#10003;</span>
+    <h2>Thanks! Your gutter sketch is in.</h2>
+    <p>A Gutter Guys of Katy specialist will review it and follow up with your quote.</p>
+    <a class="gks-btn gks-btn-primary" href="#home">Back to Home</a>
+  </div>
+</section>
+
+<style>
+  .gks{display:flex;justify-content:center;padding:1rem 0}
+  .gks-card{position:relative;width:100%;max-width:760px;background:#fff;border:1px solid var(--color-border,#d7e4f0);border-radius:.75rem;box-shadow:0 10px 30px rgba(11,95,165,.08);padding:1.25rem}
+  .gks-reset{position:absolute;top:1rem;right:1.1rem;background:none;border:none;color:var(--color-muted,#5b6b7a);font:inherit;font-size:.78rem;text-decoration:underline;cursor:pointer}
+  .gks-reset:hover{color:var(--color-primary,#0b5fa5)}
+  .gks h2{margin:0 0 .35rem;font-size:1.25rem;color:var(--color-text,#1b2733)}
+  .gks p{color:var(--color-muted,#5b6b7a);font-size:.9rem;margin:0 0 1rem}
+  .gks-fields{display:flex;flex-direction:column;gap:.8rem}
+  .gks-field{display:flex;flex-direction:column;gap:.3rem;font-size:.85rem;color:var(--color-muted,#5b6b7a)}
+  .gks-row{display:flex;gap:.6rem;flex-wrap:wrap}
+  .gks-row .gks-field{flex:1;min-width:140px}
+  .gks-input{border:1.5px solid var(--color-border,#d7e4f0);border-radius:.5rem;padding:.55rem .7rem;font:inherit;font-size:1rem;color:var(--color-text,#1b2733);width:100%}
+  .gks-input:focus{outline:none;border-color:var(--color-primary,#0b5fa5)}
+  textarea.gks-input{resize:vertical;font-family:inherit}
+  .gks-error{color:#9a2222;font-size:.85rem;margin:.8rem 0 0}
+  .gks-hint{font-size:.78rem;color:var(--color-muted,#5b6b7a);margin:.25rem 0 0}
+  .gks-actions{display:flex;justify-content:space-between;align-items:center;margin-top:1.25rem;gap:.75rem}
+  .gks-btn{display:inline-flex;align-items:center;gap:.4rem;border:none;border-radius:.5rem;padding:.6rem 1.05rem;font:inherit;font-size:.9rem;font-weight:600;cursor:pointer}
+  .gks-btn:disabled{opacity:.4;cursor:not-allowed}
+  .gks-btn-ghost{background:transparent;color:var(--color-muted,#5b6b7a)}
+  .gks-btn-ghost:hover:not(:disabled){color:var(--color-primary,#0b5fa5)}
+  .gks-btn-primary{background:var(--color-primary,#0b5fa5);color:#fff;margin-left:auto}
+  .gks-btn-primary:hover:not(:disabled){opacity:.9}
+  .gks-btn-outline{background:#fff;color:var(--color-primary,#0b5fa5);border:1.5px solid var(--color-primary,#0b5fa5)}
+  .gks-btn-sm{padding:.4rem .7rem;font-size:.8rem}
+
+  .gks-toolbar{display:flex;gap:.5rem;margin-bottom:.6rem;flex-wrap:wrap}
+  .gks-mode-btn{background:#fff;border:1.5px solid var(--color-border,#d7e4f0);border-radius:.5rem;padding:.5rem .8rem;font:inherit;font-size:.85rem;cursor:pointer;display:inline-flex;align-items:center;gap:.35rem}
+  .gks-mode-btn.is-active{border-color:var(--color-primary,#0b5fa5);background:var(--color-bg,#eaf4ff);color:var(--color-primary,#0b5fa5);font-weight:700}
+  .gks-canvas-wrap{position:relative;width:100%;height:min(68vh,560px);border:1.5px solid var(--color-border,#d7e4f0);border-radius:.6rem;background:#f7fafc;overflow:hidden;touch-action:none}
+  .gks-canvas-wrap canvas{width:100%;height:100%;display:block;cursor:crosshair}
+  .gks-canvas-hint{position:absolute;left:.6rem;bottom:.5rem;font-size:.75rem;color:var(--color-muted,#5b6b7a);background:rgba(255,255,255,.85);padding:.2rem .5rem;border-radius:.3rem;pointer-events:none}
+
+  .gks-totals{display:flex;flex-wrap:wrap;gap:.5rem;margin:.6rem 0}
+  .gks-chip{display:flex;flex-direction:column;align-items:center;gap:.1rem;background:#fff;border:1px solid var(--color-border,#d7e4f0);border-radius:.5rem;padding:.35rem .65rem;font-size:.7rem;color:var(--color-muted,#5b6b7a);min-width:68px}
+  .gks-chip strong{font-size:.95rem;color:var(--color-text,#1b2733)}
+  .gks-chip-total{border-color:var(--color-primary,#0b5fa5)}
+  .gks-chip-total strong{color:var(--color-primary,#0b5fa5)}
+
+  .gks-context{min-height:2.4rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin:.5rem 0;padding:.5rem .65rem;border:1.5px dashed var(--color-border,#d7e4f0);border-radius:.5rem;font-size:.85rem}
+  .gks-context-empty{color:var(--color-muted,#5b6b7a);font-size:.8rem}
+  .gks-context .gks-input{width:90px;display:inline-block}
+
+  .gks-section-label{margin:.9rem 0 .4rem;font-size:.78rem;font-weight:700;color:var(--color-muted,#5b6b7a);text-transform:uppercase;letter-spacing:.02em}
+  .gks-photos{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center}
+  .gks-thumb{position:relative;width:52px;height:52px;border-radius:.4rem;overflow:hidden;border:1px solid var(--color-border,#d7e4f0)}
+  .gks-thumb img{width:100%;height:100%;object-fit:cover}
+  .gks-thumb-del{position:absolute;top:-2px;right:-2px;width:16px;height:16px;line-height:14px;border-radius:50%;border:none;background:#9a2222;color:#fff;font-size:.65rem;cursor:pointer;padding:0}
+  .gks-add-photo{background:none;border:1.5px dashed var(--color-border,#d7e4f0);border-radius:.4rem;color:var(--color-primary,#0b5fa5);font-size:.78rem;padding:.6rem .8rem;cursor:pointer}
+
+  .gks-progress{height:8px;background:var(--color-bg,#eaf4ff);border-radius:999px;overflow:hidden;margin:.75rem 0;max-width:320px}
+  .gks-progress-bar{height:100%;background:var(--color-primary,#0b5fa5);transition:width .25s ease}
+  .gks-success{max-width:560px;margin:2rem auto;text-align:center;color:var(--color-text,#1b2733)}
+  .gks-success-icon{display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:var(--color-bg,#eaf4ff);color:var(--color-primary,#0b5fa5);font-size:1.6rem;margin-bottom:1rem}
+</style>
+
+<script>
+(function () {
+  'use strict';
+  var GT = window.GutterTools;
+
+  var MIN_SCALE = 4; // px per ft floor so a tiny/empty sketch doesn't over-zoom
+  var FIT_MARGIN_FT = 6;
+  var HIT_PX = 18; // screen px tolerance for tapping a point/line
+  var DEFAULT_DOWNSPOUT_DROP_FT = 10;
+  var LOCAL_KEY = 'rg-gutter-sketch';
+  var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  var rootEl = document.getElementById('gks-root');
+  if (!rootEl || !GT) {
+    if (rootEl) rootEl.innerHTML = '<p class="gks-error">Could not load required scripts. Please refresh the page.</p>';
+    return;
+  }
+  var cardEl = document.getElementById('gks-card');
+  var stageEl = document.getElementById('gks-stage');
+  var successEl = document.getElementById('gks-success');
+  var resetBtn = document.getElementById('gks-reset');
+
+  var photos = []; // { id, blob, mimeType, fileName, objectUrl, status, driveUrl }
+  var canvasEl = null, ctx = null;
+  var drag = null; // { id, pointerId }
+  var resizeTimer = null;
+  var view = { scale: 10, originX: 0, originY: 0, cssW: 0, cssH: 0 };
+
+  var state = {
+    step: 'details', // 'details' | 'survey' | 'done'
+    contact: { name: '', phone: '', email: '' },
+    serviceAddress: '',
+    rfqNumber: '',
+    gps: { lat: null, lng: null },
+    notes: '',
+    mode: 'draw', // 'draw' | 'select' | 'edit'
+    vertices: [], // { id, x, y, downspout, dropFt } - x/y in feet
+    closed: false,
+    selected: null, // { type: 'vertex', id } | { type: 'segment', index }
+    folderName: null,
+    finalizeError: null
+  };
+
+  function persistLocal() {
+    GT.saveLocal(LOCAL_KEY, {
+      contact: state.contact, serviceAddress: state.serviceAddress, rfqNumber: state.rfqNumber,
+      notes: state.notes, vertices: state.vertices, closed: state.closed
+    });
+  }
+
+  function restoreLocal() {
+    var saved = GT.loadLocal(LOCAL_KEY);
+    if (!saved) return;
+    state.contact = saved.contact || state.contact;
+    state.serviceAddress = saved.serviceAddress || '';
+    state.rfqNumber = saved.rfqNumber || '';
+    state.notes = saved.notes || '';
+    state.vertices = saved.vertices || [];
+    state.closed = !!saved.closed;
+  }
+
+  function segCount() { return state.closed ? state.vertices.length : Math.max(0, state.vertices.length - 1); }
+
+  function segEndpoints(i) {
+    return [state.vertices[i], state.vertices[(i + 1) % state.vertices.length]];
+  }
+
+  function segLength(i) {
+    var pair = segEndpoints(i);
+    return Math.hypot(pair[1].x - pair[0].x, pair[1].y - pair[0].y);
+  }
+
+  function computeTotals() {
+    var totalFt = 0, n = segCount();
+    for (var i = 0; i < n; i++) totalFt += segLength(i);
+    var downspoutCount = 0, downspoutFt = 0;
+    state.vertices.forEach(function (v) {
+      if (v.downspout) { downspoutCount++; downspoutFt += (v.dropFt != null ? v.dropFt : DEFAULT_DOWNSPOUT_DROP_FT); }
+    });
+    return {
+      totalFt: totalFt, segCount: n, pointCount: state.vertices.length,
+      downspoutCount: downspoutCount, downspoutFt: downspoutFt, grandTotalFt: totalFt + downspoutFt
+    };
+  }
+
+  function fitView() {
+    var pts = state.vertices;
+    var minX = 0, maxX = 10, minY = 0, maxY = 10;
+    if (pts.length) {
+      minX = Math.min.apply(null, pts.map(function (p) { return p.x; }));
+      maxX = Math.max.apply(null, pts.map(function (p) { return p.x; }));
+      minY = Math.min.apply(null, pts.map(function (p) { return p.y; }));
+      maxY = Math.max.apply(null, pts.map(function (p) { return p.y; }));
+    }
+    var bw = Math.max(1, maxX - minX) + FIT_MARGIN_FT * 2;
+    var bh = Math.max(1, maxY - minY) + FIT_MARGIN_FT * 2;
+    view.scale = Math.max(MIN_SCALE, Math.min(view.cssW / bw, view.cssH / bh) || MIN_SCALE);
+    view.originX = view.cssW / 2 - ((minX + maxX) / 2) * view.scale;
+    view.originY = view.cssH / 2 - ((minY + maxY) / 2) * view.scale;
+  }
+
+  function toScreen(p) { return { x: view.originX + p.x * view.scale, y: view.originY + p.y * view.scale }; }
+  function toFeet(x, y) { return { x: (x - view.originX) / view.scale, y: (y - view.originY) / view.scale }; }
+
+  function resizeCanvas() {
+    if (!canvasEl) return;
+    var rect = canvasEl.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    view.cssW = rect.width; view.cssH = rect.height;
+    canvasEl.width = Math.max(1, Math.round(rect.width * dpr));
+    canvasEl.height = Math.max(1, Math.round(rect.height * dpr));
+    ctx = canvasEl.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    fitView();
+    drawCanvas();
+  }
+
+  function debouncedResize() { clearTimeout(resizeTimer); resizeTimer = setTimeout(resizeCanvas, 150); }
+
+  function drawCanvas() {
+    if (!ctx) return;
+    ctx.clearRect(0, 0, view.cssW, view.cssH);
+    var n = state.vertices.length;
+    if (!n) return;
+
+    ctx.strokeStyle = '#0b5fa5';
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    var p0 = toScreen(state.vertices[0]);
+    ctx.moveTo(p0.x, p0.y);
+    for (var i = 1; i < n; i++) {
+      var p = toScreen(state.vertices[i]);
+      ctx.lineTo(p.x, p.y);
+    }
+    if (state.closed && n > 2) ctx.closePath();
+    ctx.stroke();
+
+    ctx.font = '13px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    var segN = segCount();
+    for (var s = 0; s < segN; s++) {
+      var pair = segEndpoints(s);
+      var a = toScreen(pair[0]), b = toScreen(pair[1]);
+      var selectedSeg = state.selected && state.selected.type === 'segment' && state.selected.index === s;
+      ctx.fillStyle = selectedSeg ? '#0b5fa5' : '#1b2733';
+      ctx.fillText(segLength(s).toFixed(1) + ' ft', (a.x + b.x) / 2, (a.y + b.y) / 2 - 6);
+    }
+
+    for (var v = 0; v < n; v++) {
+      var vertex = state.vertices[v];
+      var sp = toScreen(vertex);
+      var isSelected = state.selected && state.selected.type === 'vertex' && state.selected.id === vertex.id;
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, isSelected ? 8 : 6, 0, Math.PI * 2);
+      ctx.fillStyle = v === 0 ? '#0b5fa5' : '#ffffff';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#0b5fa5';
+      ctx.stroke();
+      if (vertex.downspout) {
+        ctx.beginPath();
+        ctx.moveTo(sp.x, sp.y + 10);
+        ctx.lineTo(sp.x - 6, sp.y + 20);
+        ctx.lineTo(sp.x + 6, sp.y + 20);
+        ctx.closePath();
+        ctx.fillStyle = '#d97706';
+        ctx.fill();
+      }
+    }
+  }
+
+  function nearestVertex(x, y) {
+    var best = null, bestDist = HIT_PX;
+    state.vertices.forEach(function (v) {
+      var sp = toScreen(v);
+      var d = Math.hypot(sp.x - x, sp.y - y);
+      if (d <= bestDist) { bestDist = d; best = v; }
+    });
+    return best;
+  }
+
+  function pointToSegmentDist(px, py, ax, ay, bx, by) {
+    var dx = bx - ax, dy = by - ay;
+    var len2 = dx * dx + dy * dy;
+    var t = len2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  }
+
+  function nearestSegment(x, y) {
+    var best = -1, bestDist = HIT_PX, n = segCount();
+    for (var i = 0; i < n; i++) {
+      var pair = segEndpoints(i);
+      var a = toScreen(pair[0]), b = toScreen(pair[1]);
+      var d = pointToSegmentDist(x, y, a.x, a.y, b.x, b.y);
+      if (d <= bestDist) { bestDist = d; best = i; }
+    }
+    return best;
+  }
+
+  function afterStructuralChange() {
+    fitView();
+    drawCanvas();
+    updateTotals();
+    updateContext();
+    persistLocal();
+  }
+
+  /** Used while actively placing points in Draw mode: redraws without
+   * re-fitting the view, so the scale/origin stay stable between taps and
+   * each tap's screen position maps predictably (proportionally) to feet -
+   * re-fitting after every single point would rescale mid-sequence and
+   * distort the shape the user is drawing. */
+  function afterDrawAdd() {
+    drawCanvas();
+    updateTotals();
+    updateContext();
+    persistLocal();
+  }
+
+  function onPointerDown(ev) {
+    var rect = canvasEl.getBoundingClientRect();
+    var x = ev.clientX - rect.left, y = ev.clientY - rect.top;
+
+    if (state.mode === 'draw') {
+      if (state.vertices.length >= 3) {
+        var first = toScreen(state.vertices[0]);
+        if (Math.hypot(first.x - x, first.y - y) <= HIT_PX) { state.closed = true; afterDrawAdd(); return; }
+      }
+      var feet = toFeet(x, y);
+      state.vertices.push({ id: GT.uid('v'), x: feet.x, y: feet.y, downspout: false, dropFt: null });
+      afterDrawAdd();
+      return;
+    }
+
+    if (state.mode === 'select') {
+      var v = nearestVertex(x, y);
+      if (v) state.selected = { type: 'vertex', id: v.id };
+      else { var segIdx = nearestSegment(x, y); state.selected = segIdx >= 0 ? { type: 'segment', index: segIdx } : null; }
+      drawCanvas();
+      updateContext();
+      return;
+    }
+
+    if (state.mode === 'edit') {
+      var hit = nearestVertex(x, y);
+      if (hit) { drag = { id: hit.id, pointerId: ev.pointerId }; canvasEl.setPointerCapture(ev.pointerId); }
+    }
+  }
+
+  function onPointerMove(ev) {
+    if (state.mode !== 'edit' || !drag || ev.pointerId !== drag.pointerId) return;
+    var rect = canvasEl.getBoundingClientRect();
+    var feet = toFeet(ev.clientX - rect.left, ev.clientY - rect.top);
+    var vertex = state.vertices.find(function (v) { return v.id === drag.id; });
+    if (!vertex) return;
+    vertex.x = feet.x; vertex.y = feet.y;
+    drawCanvas();
+    updateTotals();
+  }
+
+  function onPointerUp(ev) {
+    if (state.mode === 'edit' && drag && ev.pointerId === drag.pointerId) { drag = null; afterStructuralChange(); }
+  }
+
+  function setMode(mode) {
+    state.mode = mode;
+    state.selected = null;
+    drag = null;
+    document.querySelectorAll('.gks-mode-btn').forEach(function (b) {
+      b.classList.toggle('is-active', b.getAttribute('data-mode') === mode);
+    });
+    drawCanvas();
+    updateContext();
+  }
+
+  function toggleDownspout(id) {
+    var v = state.vertices.find(function (v) { return v.id === id; });
+    if (!v) return;
+    v.downspout = !v.downspout;
+    v.dropFt = v.downspout ? DEFAULT_DOWNSPOUT_DROP_FT : null;
+    afterStructuralChange();
+  }
+
+  function deleteVertex(id) {
+    state.vertices = state.vertices.filter(function (v) { return v.id !== id; });
+    if (state.vertices.length < 3) state.closed = false;
+    state.selected = null;
+    afterStructuralChange();
+  }
+
+  function setSegmentLength(index, newLen) {
+    if (!(newLen > 0)) return;
+    var pair = segEndpoints(index), a = pair[0], b = pair[1];
+    var dx = b.x - a.x, dy = b.y - a.y;
+    var cur = Math.hypot(dx, dy) || 1;
+    b.x = a.x + (dx / cur) * newLen;
+    b.y = a.y + (dy / cur) * newLen;
+    afterStructuralChange();
+  }
+
+  function chip(label, value, isTotal) {
+    return '<span class="gks-chip' + (isTotal ? ' gks-chip-total' : '') + '"><strong>' + GT.escapeHtml(value) +
+      '</strong><span>' + GT.escapeHtml(label) + '</span></span>';
+  }
+
+  function updateTotals() {
+    var el = document.getElementById('gks-totals');
+    if (!el) return;
+    var t = computeTotals();
+    el.innerHTML = chip('Points', String(t.pointCount)) + chip('Gutters', t.totalFt.toFixed(1) + ' ft') +
+      chip('Downspouts', t.downspoutCount + ' (' + t.downspoutFt.toFixed(0) + ' ft)') +
+      chip('Total', t.grandTotalFt.toFixed(1) + ' ft', true);
+  }
+
+  function updateContext() {
+    var el = document.getElementById('gks-context');
+    if (!el) return;
+    var sel = state.selected;
+    if (!sel) {
+      var hint = state.mode === 'draw' ? 'Tap the canvas to add points. Tap the first point again to close the shape.' :
+        state.mode === 'select' ? 'Tap a point or line to select it.' : 'Drag a point to resize.';
+      el.innerHTML = '<span class="gks-context-empty">' + GT.escapeHtml(hint) + '</span>';
+      return;
+    }
+    if (sel.type === 'vertex') {
+      var v = state.vertices.find(function (v) { return v.id === sel.id; });
+      if (!v) { el.innerHTML = ''; return; }
+      el.innerHTML =
+        '<button type="button" class="gks-btn gks-btn-outline gks-btn-sm" id="gks-ctx-ds">' +
+        (v.downspout ? 'Remove downspout' : 'Add downspout here') + '</button>' +
+        '<button type="button" class="gks-btn gks-btn-ghost gks-btn-sm" id="gks-ctx-del">Delete point</button>';
+      document.getElementById('gks-ctx-ds').addEventListener('click', function () { toggleDownspout(v.id); });
+      document.getElementById('gks-ctx-del').addEventListener('click', function () { deleteVertex(v.id); });
+    } else {
+      el.innerHTML =
+        '<label>Length (ft) <input class="gks-input" id="gks-ctx-len" type="number" min="0" step="0.5" value="' +
+        segLength(sel.index).toFixed(1) + '"></label>' +
+        '<button type="button" class="gks-btn gks-btn-primary gks-btn-sm" id="gks-ctx-set">Set</button>';
+      document.getElementById('gks-ctx-set').addEventListener('click', function () {
+        setSegmentLength(sel.index, parseFloat(document.getElementById('gks-ctx-len').value));
+      });
+    }
+  }
+
+  function addPhotosFromFiles(fileList) {
+    Array.prototype.forEach.call(fileList, function (file) {
+      photos.push({
+        id: GT.uid('photo'), blob: file, mimeType: file.type || 'image/jpeg',
+        fileName: file.name || ('photo-' + Date.now() + '.jpg'),
+        objectUrl: URL.createObjectURL(file), status: 'local'
+      });
+    });
+    updatePhotos();
+  }
+
+  function removePhoto(id) {
+    var p = photos.find(function (p) { return p.id === id; });
+    if (p && p.objectUrl) URL.revokeObjectURL(p.objectUrl);
+    photos = photos.filter(function (p) { return p.id !== id; });
+    updatePhotos();
+  }
+
+  function updatePhotos() {
+    var el = document.getElementById('gks-photos');
+    if (!el) return;
+    el.innerHTML = photos.map(function (p) {
+      return '<span class="gks-thumb"><img src="' + p.objectUrl + '" alt=""><button type="button" class="gks-thumb-del" data-del-photo="' + p.id + '">&times;</button></span>';
+    }).join('') + '<button type="button" class="gks-add-photo" id="gks-add-photo">+ Add photos</button>';
+    document.getElementById('gks-add-photo').addEventListener('click', function () {
+      document.getElementById('gks-photo-input').click();
+    });
+    el.querySelectorAll('[data-del-photo]').forEach(function (btn) {
+      btn.addEventListener('click', function () { removePhoto(btn.getAttribute('data-del-photo')); });
+    });
+  }
+
+  function useMyLocation() {
+    var statusEl = document.getElementById('gks-gps-status');
+    statusEl.textContent = 'Locating...';
+    GT.getLocation().then(function (loc) {
+      state.gps.lat = loc.lat; state.gps.lng = loc.lng;
+      statusEl.textContent = 'Got it: ' + loc.lat.toFixed(5) + ', ' + loc.lng.toFixed(5);
+    }).catch(function (err) { statusEl.textContent = err.message; });
+  }
+
+  function ensureFolderName() {
+    if (!state.folderName) state.folderName = GT.folderNameFor(state.contact.name, state.contact.phone, GT.uid('x').slice(-6));
+    return state.folderName;
+  }
+
+  function renderUploading() {
+    var el = document.getElementById('gks-submit-area');
+    if (!el) return;
+    var total = photos.length;
+    var done = photos.filter(function (p) { return p.status === 'uploaded'; }).length;
+    var errored = photos.filter(function (p) { return p.status === 'error'; });
+    var pct = total ? Math.round(done / total * 100) : 100;
+
+    if (errored.length) {
+      el.innerHTML = '<p class="gks-error">' + errored.length + ' photo(s) failed to upload.</p>' +
+        '<button type="button" class="gks-btn gks-btn-primary" id="gks-retry">Retry</button>';
+      document.getElementById('gks-retry').addEventListener('click', runPhotoUploadQueue);
+      return;
+    }
+    if (state.finalizeError) {
+      el.innerHTML = '<p class="gks-error">' + GT.escapeHtml(state.finalizeError) + '</p>' +
+        '<button type="button" class="gks-btn gks-btn-primary" id="gks-retry2">Try again</button>';
+      document.getElementById('gks-retry2').addEventListener('click', function () { state.finalizeError = null; finalizeSubmission(); });
+      return;
+    }
+    if (done < total) {
+      el.innerHTML = '<div class="gks-progress"><div class="gks-progress-bar" style="width:' + pct + '%"></div></div>' +
+        '<p class="gks-hint">Uploading ' + done + ' of ' + total + ' photo(s)&hellip;</p>';
+      return;
+    }
+    el.innerHTML = '<p class="gks-hint">Finishing up&hellip;</p>';
+  }
+
+  function runPhotoUploadQueue() {
+    var folderName = ensureFolderName();
+    var pending = photos.filter(function (p) { return p.status !== 'uploaded'; });
+
+    function next(i) {
+      if (i >= pending.length) {
+        var anyError = pending.some(function (p) { return p.status === 'error'; });
+        if (!anyError) finalizeSubmission();
+        return;
+      }
+      var p = pending[i];
+      p.status = 'uploading';
+      renderUploading();
+      GT.uploadAsset(p, folderName, 'GutterSketch').then(function (url) {
+        p.status = 'uploaded'; p.driveUrl = url;
+        renderUploading();
+        next(i + 1);
+      }).catch(function (err) {
+        console.error(err);
+        p.status = 'error';
+        renderUploading();
+        next(i + 1);
+      });
+    }
+    next(0);
+  }
+
+  function finalizeSubmission() {
+    var totals = computeTotals();
+    var folderName = ensureFolderName();
+    state.selected = null;
+    drawCanvas();
+
+    canvasEl.toBlob(function (blob) {
+      (blob ? GT.uploadAsset({ blob: blob, fileName: 'diagram.png', mimeType: 'image/png' }, folderName, 'GutterSketch') : Promise.resolve(''))
+        .catch(function (err) { console.error('Diagram export failed, continuing without it', err); return ''; })
+        .then(function (diagramUrl) {
+          var segmentsForExport = [];
+          var n = segCount();
+          for (var i = 0; i < n; i++) segmentsForExport.push({ order: i + 1, lengthFt: Math.round(segLength(i) * 10) / 10 });
+          state.vertices.forEach(function (v, idx) {
+            if (v.downspout) segmentsForExport.push({ order: idx + 1, downspout: true, dropFt: v.dropFt });
+          });
+
+          var fields = {
+            contactName: state.contact.name,
+            contactPhone: state.contact.phone,
+            contactEmail: state.contact.email,
+            serviceAddress: state.serviceAddress,
+            rfqNumber: state.rfqNumber,
+            submittedBy: GT.currentUserLabel(),
+            gpsLat: state.gps.lat != null ? state.gps.lat : '',
+            gpsLng: state.gps.lng != null ? state.gps.lng : '',
+            totalGutterFt: Math.round(totals.totalFt * 10) / 10,
+            downspoutCount: totals.downspoutCount,
+            totalDownspoutFt: totals.downspoutFt,
+            cornerCount: totals.pointCount,
+            grandTotalFt: Math.round(totals.grandTotalFt * 10) / 10,
+            shapeClosed: state.closed,
+            photoCount: photos.length,
+            photoUrls: JSON.stringify(photos.map(function (p) { return p.driveUrl; }).filter(Boolean)),
+            diagramUrl: diagramUrl || '',
+            notes: state.notes || '',
+            segmentsJson: JSON.stringify(segmentsForExport)
+          };
+
+          return window.RainGuard.submitForm('GutterSketch', 'gutter-sketch', fields, { sheetName: 'GutterSurvey' });
+        })
+        .then(function () {
+          GT.saveLocal(LOCAL_KEY, null);
+          state.step = 'done';
+          render();
+        })
+        .catch(function (err) {
+          console.error(err);
+          state.finalizeError = String(err && err.message || err);
+          renderUploading();
+        });
+    }, 'image/png');
+  }
+
+  function startSubmit() {
+    state.finalizeError = null;
+    var el = document.getElementById('gks-submit-area');
+    if (el) el.innerHTML = '<p class="gks-hint">Starting upload&hellip;</p>';
+    runPhotoUploadQueue();
+  }
+
+  function bindField(id, setter) {
+    document.getElementById(id).addEventListener('input', function (ev) { setter(ev.target.value); });
+  }
+
+  function renderDetails() {
+    stageEl.innerHTML =
+      '<h2>Gutter sketch</h2>' +
+      '<p>Draw the roofline, drop downspouts, and attach a few photos - we will put together a diagram and an accurate quote.</p>' +
+      '<div class="gks-fields">' +
+      '<div class="gks-row">' +
+      '<label class="gks-field"><span>Name</span><input class="gks-input" id="gks-name" value="' + GT.escapeHtml(state.contact.name) + '"></label>' +
+      '<label class="gks-field"><span>Phone</span><input class="gks-input" id="gks-phone" type="tel" value="' + GT.escapeHtml(state.contact.phone) + '"></label>' +
+      '</div>' +
+      '<label class="gks-field"><span>Email</span><input class="gks-input" id="gks-email" type="email" value="' + GT.escapeHtml(state.contact.email) + '"></label>' +
+      '<label class="gks-field"><span>Service address</span><input class="gks-input" id="gks-address" value="' + GT.escapeHtml(state.serviceAddress) + '"></label>' +
+      '<div class="gks-row">' +
+      '<label class="gks-field"><span>RFQ number (optional)</span><input class="gks-input" id="gks-rfq" value="' + GT.escapeHtml(state.rfqNumber) + '"></label>' +
+      '<div class="gks-field"><span>GPS location (optional)</span>' +
+      '<button type="button" class="gks-btn gks-btn-outline gks-btn-sm" id="gks-gps-btn">Use my current location</button>' +
+      '<span class="gks-hint" id="gks-gps-status">' +
+      (state.gps.lat != null ? ('Got it: ' + state.gps.lat.toFixed(5) + ', ' + state.gps.lng.toFixed(5)) : '') +
+      '</span></div></div></div>' +
+      '<p class="gks-error" id="gks-details-error" hidden></p>' +
+      '<div class="gks-actions"><span></span><button type="button" class="gks-btn gks-btn-primary" id="gks-details-next">Continue</button></div>';
+
+    bindField('gks-name', function (v) { state.contact.name = v; });
+    bindField('gks-phone', function (v) { state.contact.phone = v; });
+    bindField('gks-email', function (v) { state.contact.email = v; });
+    bindField('gks-address', function (v) { state.serviceAddress = v; });
+    bindField('gks-rfq', function (v) { state.rfqNumber = v; });
+    document.getElementById('gks-gps-btn').addEventListener('click', useMyLocation);
+    document.getElementById('gks-details-next').addEventListener('click', function () {
+      var errEl = document.getElementById('gks-details-error');
+      if (!state.contact.name.trim() || !state.contact.phone.trim() || !EMAIL_RE.test(state.contact.email.trim()) || !state.serviceAddress.trim()) {
+        errEl.textContent = 'Please enter your name, phone, a valid email, and the service address.';
+        errEl.hidden = false;
+        return;
+      }
+      errEl.hidden = true;
+      persistLocal();
+      state.step = 'survey';
+      render();
+    });
+  }
+
+  function renderSurveyStep() {
+    stageEl.innerHTML =
+      '<button type="button" class="gks-btn gks-btn-ghost gks-btn-sm" id="gks-back-details">&larr; Edit details</button>' +
+      '<div class="gks-toolbar">' +
+      '<button type="button" class="gks-mode-btn is-active" data-mode="draw">&#9998; Draw</button>' +
+      '<button type="button" class="gks-mode-btn" data-mode="select">&#9757; Select</button>' +
+      '<button type="button" class="gks-mode-btn" data-mode="edit">&#10021; Edit</button>' +
+      '</div>' +
+      '<div class="gks-canvas-wrap"><canvas id="gks-canvas"></canvas>' +
+      '<span class="gks-canvas-hint">Draw: tap to add points. Select: tap a point/line. Edit: drag a point.</span></div>' +
+      '<div class="gks-context" id="gks-context"></div>' +
+      '<div class="gks-totals" id="gks-totals"></div>' +
+      '<p class="gks-section-label">Photos</p>' +
+      '<div class="gks-photos" id="gks-photos"></div>' +
+      '<input type="file" accept="image/*" capture="environment" multiple id="gks-photo-input" hidden>' +
+      '<label class="gks-field" style="margin-top:.9rem"><span>Notes (optional)</span>' +
+      '<textarea class="gks-input" id="gks-notes" rows="2">' + GT.escapeHtml(state.notes) + '</textarea></label>' +
+      '<p class="gks-error" id="gks-survey-error" hidden></p>' +
+      '<div class="gks-actions" id="gks-submit-area"><span></span><button type="button" class="gks-btn gks-btn-primary" id="gks-submit">Submit Sketch</button></div>';
+
+    canvasEl = document.getElementById('gks-canvas');
+    canvasEl.addEventListener('pointerdown', onPointerDown);
+    canvasEl.addEventListener('pointermove', onPointerMove);
+    canvasEl.addEventListener('pointerup', onPointerUp);
+    canvasEl.addEventListener('pointercancel', onPointerUp);
+    window.addEventListener('resize', debouncedResize);
+
+    document.getElementById('gks-back-details').addEventListener('click', function () { state.step = 'details'; render(); });
+    document.querySelectorAll('.gks-mode-btn').forEach(function (b) {
+      b.addEventListener('click', function () { setMode(b.getAttribute('data-mode')); });
+    });
+    document.getElementById('gks-notes').addEventListener('input', function (ev) { state.notes = ev.target.value; persistLocal(); });
+    document.getElementById('gks-photo-input').addEventListener('change', function (ev) {
+      addPhotosFromFiles(ev.target.files);
+      ev.target.value = '';
+    });
+    document.getElementById('gks-submit').addEventListener('click', function () {
+      var errEl = document.getElementById('gks-survey-error');
+      if (!state.vertices.length) {
+        errEl.textContent = 'Add at least one point before submitting.';
+        errEl.hidden = false;
+        return;
+      }
+      errEl.hidden = true;
+      startSubmit();
+    });
+
+    resizeCanvas();
+    updateTotals();
+    updateContext();
+    updatePhotos();
+  }
+
+  function render() {
+    if (state.step === 'done') { cardEl.hidden = true; successEl.hidden = false; return; }
+    cardEl.hidden = false;
+    successEl.hidden = true;
+    resetBtn.hidden = false;
+    if (state.step === 'survey') renderSurveyStep();
+    else renderDetails();
+  }
+
+  resetBtn.addEventListener('click', function () {
+    if (!window.confirm('Start over? This will discard your sketch and photos.')) return;
+    photos.forEach(function (p) { if (p.objectUrl) URL.revokeObjectURL(p.objectUrl); });
+    photos = [];
+    state.contact = { name: '', phone: '', email: '' };
+    state.serviceAddress = ''; state.rfqNumber = ''; state.notes = '';
+    state.gps = { lat: null, lng: null };
+    state.vertices = []; state.closed = false; state.selected = null;
+    state.mode = 'draw'; state.folderName = null; state.finalizeError = null;
+    GT.saveLocal(LOCAL_KEY, null);
+    state.step = 'details';
+    render();
+  });
+
+  restoreLocal();
+  render();
+})();
+</script>
