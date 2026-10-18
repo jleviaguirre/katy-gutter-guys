@@ -77,17 +77,17 @@ body {
 .site-phone:hover { color: var(--color-primary); }
 
 .site-btn {
-  display: inline-flex;
-  align-items: center;
-  border: none;
-  border-radius: 0.5rem;
-  padding: 0.55rem 1.05rem;
-  font: inherit;
-  font-size: 0.88rem;
-  font-weight: 700;
-  text-decoration: none;
-  cursor: pointer;
-  white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    border: none;
+    border-radius: 0.5rem;
+    padding: 0.15rem 1.05rem;
+    font: inherit;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
 }
 
 .site-btn-primary { background: var(--color-primary); color: #ffffff; }
@@ -98,6 +98,85 @@ body {
 @media (max-width: 560px) {
   .site-actions .site-phone span { display: none; }
 }
+
+/* Passwordless login modal (email -> code steps). Plain markup/CSS in the
+ * app shell, not sheet-authored, since every page needs the same login UI
+ * regardless of which module is currently routed. */
+.login-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.login-modal[hidden] { display: none; }
+
+.login-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 29, 41, 0.45);
+}
+
+.login-modal-card {
+  position: relative;
+  width: min(360px, 100%);
+  background: #ffffff;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  box-shadow: 0 12px 32px rgba(17, 29, 41, 0.25);
+}
+
+.login-modal-card h2 { margin: 0 0 0.75rem; font-size: 1.15rem; }
+
+.login-modal-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  background: transparent;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--color-muted);
+}
+
+.login-hint { margin: 0 0 1rem; font-size: 0.85rem; color: var(--color-muted); }
+
+.login-field { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 1rem; font-size: 0.85rem; font-weight: 600; }
+
+.login-field input {
+  font: inherit;
+  padding: 0.55rem 0.7rem;
+  border: 1.5px solid var(--color-border);
+  border-radius: 0.5rem;
+  color: var(--color-text);
+}
+
+.login-field input:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+
+.login-submit { width: 100%; justify-content: center; padding: 0.6rem 1rem; font-size: 0.85rem; }
+
+.login-links { display: flex; justify-content: space-between; margin-top: 0.75rem; }
+
+.login-link {
+  border: none;
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.login-link:disabled { color: var(--color-muted); cursor: default; text-decoration: none; }
+
+.login-error { margin: 0.75rem 0 0; font-size: 0.8rem; color: #b42318; }
+.login-error[hidden] { display: none; }
 
 #site-footer {
   text-align: center;

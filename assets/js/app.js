@@ -14,8 +14,19 @@ const appEl = document.getElementById('app');
 const toastEl = document.getElementById('toast');
 const loginBtnEl = document.getElementById('site-login-btn');
 
+const SESSION_TOKEN_KEY = 'rg-session-token';
+const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
+const RESEND_COOLDOWN_MS = 30 * 1000;
+
 /** module name (lowercase) -> module row from the sheet */
 let modulesByKey = new Map();
+
+/** { email, role } when logged in, else null. Role always comes from a
+ * fresh whoAmI call to the backend - never trusted from localStorage - see
+ * /docs/SETUP.md's "Passwordless login" section for why. */
+let session = null;
+let pendingLoginEmail = '';
+let heartbeatTimer = null;
 
 init();
 
@@ -23,7 +34,8 @@ async function init() {
   //document.getElementById('year').textContent = new Date().getFullYear();
   registerServiceWorker();
   wireRemoteForms();
-  wireLoginPlaceholder();
+  wireLogin();
+  await restoreSession();
 
   try {
     const modules = await fetchModules();
@@ -53,11 +65,209 @@ function indexModules(modules) {
   );
 }
 
-function wireLoginPlaceholder() {
-  if (!loginBtnEl) return;
+/**
+ * Passwordless login (email -> one-time code). See Code.gs's "Passwordless
+ * login" section for the backend half and /docs/SETUP.md for the full
+ * design. The browser only ever stores an opaque session token; the role
+ * shown/used anywhere in the UI comes from whoAmI, re-read from the Users
+ * sheet on every page load - never from a value the client could tamper
+ * with.
+ */
+function wireLogin() {
+  const modalEl = document.getElementById('login-modal');
+  const backdropEl = document.getElementById('login-modal-backdrop');
+  const closeBtnEl = document.getElementById('login-modal-close');
+  const emailFormEl = document.getElementById('login-email-form');
+  const emailInputEl = document.getElementById('login-email-input');
+  const emailErrorEl = document.getElementById('login-email-error');
+  const codeFormEl = document.getElementById('login-code-form');
+  const codeInputEl = document.getElementById('login-code-input');
+  const codeErrorEl = document.getElementById('login-code-error');
+  const codeEmailEl = document.getElementById('login-code-email');
+  const resendBtnEl = document.getElementById('login-resend-btn');
+  const changeEmailBtnEl = document.getElementById('login-change-email-btn');
+
+  if (!loginBtnEl || !modalEl) return;
+
   loginBtnEl.addEventListener('click', () => {
-    showToast('Login is coming soon.');
+    if (session) {
+      if (confirm(`Log out of ${session.email}?`)) logout();
+      return;
+    }
+    openModal();
   });
+
+  backdropEl.addEventListener('click', closeModal);
+  closeBtnEl.addEventListener('click', closeModal);
+  changeEmailBtnEl.addEventListener('click', showEmailStep);
+
+  emailFormEl.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    hideError(emailErrorEl);
+    const email = emailInputEl.value.trim();
+    if (!email) return;
+    setFormBusy(emailFormEl, true);
+    try {
+      await authRequest('requestCode', { email });
+      pendingLoginEmail = email;
+      showCodeStep(email);
+      startResendCooldown(resendBtnEl);
+    } catch (err) {
+      showError(emailErrorEl, err.message);
+    } finally {
+      setFormBusy(emailFormEl, false);
+    }
+  });
+
+  codeFormEl.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    hideError(codeErrorEl);
+    const code = codeInputEl.value.trim();
+    if (!code) return;
+    setFormBusy(codeFormEl, true);
+    try {
+      const data = await authRequest('verifyCode', { email: pendingLoginEmail, code });
+      applySession(data.token, data.email, data.role);
+      closeModal();
+      showToast(`Logged in as ${data.email}.`);
+    } catch (err) {
+      showError(codeErrorEl, err.message);
+    } finally {
+      setFormBusy(codeFormEl, false);
+    }
+  });
+
+  resendBtnEl.addEventListener('click', async () => {
+    hideError(codeErrorEl);
+    try {
+      await authRequest('requestCode', { email: pendingLoginEmail });
+      showToast('Code resent.');
+      startResendCooldown(resendBtnEl);
+    } catch (err) {
+      showError(codeErrorEl, err.message);
+    }
+  });
+
+  function openModal() {
+    showEmailStep();
+    modalEl.hidden = false;
+    emailInputEl.focus();
+  }
+
+  function closeModal() {
+    modalEl.hidden = true;
+  }
+
+  function showEmailStep() {
+    emailFormEl.hidden = false;
+    codeFormEl.hidden = true;
+    hideError(emailErrorEl);
+    hideError(codeErrorEl);
+    emailFormEl.reset();
+    codeFormEl.reset();
+  }
+
+  function showCodeStep(email) {
+    emailFormEl.hidden = true;
+    codeFormEl.hidden = false;
+    codeEmailEl.textContent = email;
+    codeInputEl.focus();
+  }
+}
+
+function startResendCooldown(buttonEl) {
+  let secondsLeft = Math.ceil(RESEND_COOLDOWN_MS / 1000);
+  buttonEl.disabled = true;
+  const label = buttonEl.textContent.replace(/ \(\d+s\)$/, '');
+  buttonEl.textContent = `${label} (${secondsLeft}s)`;
+  const timer = setInterval(() => {
+    secondsLeft -= 1;
+    if (secondsLeft <= 0) {
+      clearInterval(timer);
+      buttonEl.disabled = false;
+      buttonEl.textContent = label;
+    } else {
+      buttonEl.textContent = `${label} (${secondsLeft}s)`;
+    }
+  }, 1000);
+}
+
+function setFormBusy(formEl, busy) {
+  formEl.querySelectorAll('button').forEach((btn) => { btn.disabled = busy; });
+}
+
+function showError(el, message) {
+  el.textContent = message;
+  el.hidden = false;
+}
+
+function hideError(el) {
+  el.hidden = true;
+}
+
+async function authRequest(action, fields) {
+  const response = await fetch(`${API_BASE_URL}/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...fields })
+  });
+  const data = await response.json().catch(() => ({ ok: false, error: 'Invalid response' }));
+  if (!data.ok) {
+    throw new Error(data.error || 'Something went wrong.');
+  }
+  return data;
+}
+
+async function restoreSession() {
+  const token = localStorage.getItem(SESSION_TOKEN_KEY);
+  if (!token) {
+    updateLoginUI();
+    return;
+  }
+  try {
+    const data = await authRequest('whoAmI', { token });
+    applySession(token, data.email, data.role);
+  } catch (err) {
+    localStorage.removeItem(SESSION_TOKEN_KEY);
+    updateLoginUI();
+  }
+}
+
+function applySession(token, email, role) {
+  localStorage.setItem(SESSION_TOKEN_KEY, token);
+  session = { email, role };
+  window.RainGuard.currentUser = session;
+  updateLoginUI();
+  startHeartbeat(token);
+}
+
+async function logout() {
+  const token = localStorage.getItem(SESSION_TOKEN_KEY);
+  clearInterval(heartbeatTimer);
+  localStorage.removeItem(SESSION_TOKEN_KEY);
+  session = null;
+  window.RainGuard.currentUser = null;
+  updateLoginUI();
+  showToast('Logged out.');
+  if (token) authRequest('logout', { token }).catch(() => {});
+}
+
+function startHeartbeat(token) {
+  clearInterval(heartbeatTimer);
+  heartbeatTimer = setInterval(() => {
+    authRequest('touchSession', { token }).catch(() => {});
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
+function updateLoginUI() {
+  if (!loginBtnEl) return;
+  if (session) {
+    loginBtnEl.textContent = session.email.charAt(0).toUpperCase();
+    loginBtnEl.title = `Logged in as ${session.email} (${session.role}) - click to log out`;
+  } else {
+    loginBtnEl.textContent = '👤';
+    loginBtnEl.title = 'Login';
+  }
 }
 
 function currentModuleKey() {

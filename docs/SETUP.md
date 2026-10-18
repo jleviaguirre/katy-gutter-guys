@@ -222,15 +222,119 @@ module's entire `html` column is one cell - so logic reused by more than
 one module belongs in a plain static asset instead of being duplicated in
 every module. [`assets/js/gutter-tools.js`](/assets/js/gutter-tools.js)
 holds that shared logic (`uploadAsset`, `blobToBase64`, geolocation, local
-storage helpers, etc. - exposed as `window.GutterTools`) for the two gutter
-modules above, and is loaded once, globally, by `index.html` (the same way
-`config.js`/`app.js` already are) rather than per-module - a module's own
-inline `<script>` can rely on `window.GutterTools` already being ready by
-the time it runs, with no load-order code of its own to write. If you add
-another module that needs the same kind of helpers, reuse this file (or add
-to it) instead of copy-pasting logic into the Sheet cell; keep an eye on
-your module's own character count (e.g. "Copy to clipboard" the cell
-content and check its length) if it grows a lot of module-specific markup.
+storage helpers, etc. - exposed as `window.GutterTools`) for the gutter
+modules on this page, and is loaded once, globally, by `index.html` (the
+same way `config.js`/`app.js` already are) rather than per-module - a
+module's own inline `<script>` can rely on `window.GutterTools` already
+being ready by the time it runs, with no load-order code of its own to
+write. If you add another module that needs the same kind of helpers, reuse
+this file (or add to it) instead of copy-pasting logic into the Sheet cell;
+keep an eye on your module's own character count (e.g. "Copy to clipboard"
+the cell content and check its length) if it grows a lot of
+module-specific markup.
+
+## Gutter Canvas module (gesture-first sketch tool)
+
+[`docs/modules/gutter-canvas.html`](/docs/modules/gutter-canvas.html) is a
+third take on the same idea, built around direct manipulation instead of a
+mode toolbar, to use more of the screen (especially on phones) and support
+multiple separate, disconnected runs the way a technician actually sketches
+a roofline by hand:
+
+1. Copy the entire contents of that file into the `html` column of a
+   `Modules` row with `module = GutterCanvas`. **Do not hand-edit this
+   file** - see "Source file and minified build" below; edit
+   `gutter-canvas.src.html` instead and regenerate it.
+2. Just two floating buttons sit on top of the canvas: **Gutters** and
+   **Downspouts**, plus a small gear icon for grid settings. In Gutters
+   mode, tap blank canvas to place a point, tap blank again to extend it
+   into a line (keeps chaining while you keep tapping); tap an existing
+   line's open end to arm it so the next blank tap resumes *that* line
+   instead (works on any earlier, disconnected line, not just the most
+   recent one); tap the already-active Gutters button to "lift the pen"
+   and start a fresh, disconnected line; tap a mid-point to select it
+   (deleting a point bridges/reconnects its neighbors, like normal
+   polyline editing); tap a segment's body to select it (shows a length
+   field, a "Remove" button, and a photo-attach button - the segment
+   highlights so it's clear which one a photo will link to; deleting a
+   *segment* does **not** bridge - it splits the line into independent
+   fragments around the gap, discarding any fragment left with under 2
+   points). Dragging a point moves just that point; dragging a segment's
+   body slides the whole run without changing its length. In Downspouts
+   mode, tap blank canvas to drop a marker anywhere (it doesn't have to
+   touch a line); tap/drag an existing one to select/move it.
+3. The canvas supports **pan and zoom** independent of the drawing
+   gestures: mouse wheel zooms (anchored at the cursor), dragging on
+   blank canvas pans, and on touch devices a two-finger pinch zooms
+   (anchored at the pinch midpoint) while a one-finger drag on blank
+   space still pans. Because panning/zooming is available, the view
+   never auto re-centers after the first load (except after "Start
+   over") - so the user's own pan/zoom position is never fought by the
+   app.
+4. Measurement labels rotate to run alongside their segment (not always
+   horizontal), so a near-vertical gutter run's length reads vertically
+   instead of being squashed/overlapping the line.
+5. The gear icon opens a small popup for **snap-to-grid**, **show/hide
+   gridlines**, and **grid size in feet** (accepts whole numbers or
+   fractions, e.g. `0.5`). Snap and show-gridlines both default to *on*.
+6. Workflow is **sketch first, contact details last** (the opposite order
+   from the other two modules) - you draw first, then the Details step
+   (name/phone/email - email required - service address/optional
+   GPS/Submit) appears once you tap Continue. There's no user-typed quote
+   number; one is auto-generated and shown on the success screen instead.
+7. Photos attach only to whatever is currently selected (a segment or a
+   downspout) - there is no general "whole visit" photo slot - so
+   `segmentsJson` includes each segment's own `photoUrls`, letting a
+   reviewer see exactly which photo goes with which run.
+8. Submissions land in the same `GutterSurvey` tab as the other two
+   modules. `submittedBy` and the 50,000-character-limit/shared-helpers
+   notes above apply here too. The submitted diagram PNG is built from an
+   independent, freshly-created offscreen canvas (not the live/interactive
+   one, which may already be detached from the DOM by submit time) so it
+   stays populated and accurate.
+
+### Source file and minified build
+
+`gutter-canvas.src.html` has grown complex enough (pan/zoom, grid
+snapping, rotated labels, per-segment photos, etc.) that keeping it
+readable and staying under the Sheet's 50,000-character cell limit pulled
+in opposite directions. This module now uses a two-file convention instead
+of hand-trimming comments every time it changes:
+
+- **`docs/modules/gutter-canvas.src.html`** - the readable source of
+  truth. Make all edits here. Not meant to be pasted into the Sheet
+  directly (it's larger than 50,000 characters).
+- **`docs/modules/gutter-canvas.html`** - the production file, generated
+  from the source by minifying its `<style>` and `<script>` blocks and
+  collapsing whitespace in the static markup. This is the file you copy
+  into the Sheet.
+
+To regenerate the production file after editing the source (PowerShell,
+from the repo root):
+
+```powershell
+$src = Get-Content -Raw 'docs\modules\gutter-canvas.src.html'
+$styleMatch = [regex]::Match($src, '(?s)<style>(.*?)</style>')
+$scriptMatch = [regex]::Match($src, '(?s)<script>(.*?)</script>')
+$before = $src.Substring(0, $styleMatch.Index)
+$between = $src.Substring($styleMatch.Index + $styleMatch.Length, $scriptMatch.Index - ($styleMatch.Index + $styleMatch.Length))
+$after = $src.Substring($scriptMatch.Index + $scriptMatch.Length)
+
+Set-Content "$env:TEMP\s.css" $styleMatch.Groups[1].Value -NoNewline
+Set-Content "$env:TEMP\s.js" $scriptMatch.Groups[1].Value -NoNewline
+npx --yes clean-css-cli -o "$env:TEMP\s.min.css" "$env:TEMP\s.css"
+npx --yes terser "$env:TEMP\s.js" -c -m -o "$env:TEMP\s.min.js"
+
+$beforeCollapsed = ([regex]::Replace($before, '>\s+<', '><') -replace '\s{2,}', ' ').Trim()
+$final = $beforeCollapsed + "`n<style>" + (Get-Content -Raw "$env:TEMP\s.min.css") + "</style>" + $between +
+  "<script>" + (Get-Content -Raw "$env:TEMP\s.min.js") + "</script>" + $after
+Set-Content 'docs\modules\gutter-canvas.html' $final -NoNewline -Encoding UTF8
+```
+
+Then spot-check the result (`node --check` on the extracted `<script>`
+block, a quick load in a browser) before pasting it into the Sheet. If any
+future module hits the same comment-trimming pain, this is the template
+to follow for it too.
 
 ## Fixed site header
 
@@ -240,11 +344,57 @@ way `#site-footer` is, and not sheet-driven at all.
 
 - Edit the logo text, phone number, or the "Get a Free Quote"/"Login"
   buttons directly in `index.html`.
-- "Login" is currently a placeholder - clicking it shows a toast; wire it
-  up to a real flow in `app.js`'s `wireLoginPlaceholder()` when ready.
+- "Login" opens the passwordless email-code modal described below (wired
+  up in `app.js`'s `wireLogin()`); it is no longer a placeholder.
 - The in-page menu (Services/How It Works/etc.) is intentionally **not**
   part of this fixed header - it lives on the home page itself, as the
   `Masthead` row described below, so it only appears where its targets do.
+
+## Passwordless login (email one-time code)
+
+Clicking "Login" opens a small modal (markup lives in `index.html`,
+styled in `assets/css/styles.css`, wired in `assets/js/app.js`) that asks
+for an email, emails a one-time code, then asks for that code - no
+password, ever. The backend half lives in `Code.gs`'s "Passwordless
+login" section.
+
+**Sheets involved**
+- **`Users`** tab: `email | role | code | codeIssuedAt | lastLogin |
+  failedAttempts` (the last four columns are added automatically the
+  first time they're needed). `role` is one of `admin`, `technician`, or
+  `customer`. Any email can request a code; an email that isn't already a
+  row is auto-created with `role = customer` (self-serve for homeowners).
+  **`admin` and `technician` rows must be added/edited by hand in the
+  sheet** - the login code itself never assigns or upgrades a role.
+- **`Sessions`** tab (auto-created): `token | email | createdAt |
+  lastSeenAt` - one row per logged-in device. Deleting a row here force-logs-out
+  that one device; deleting all rows for an email logs it out everywhere.
+
+**Why a code with no time limit is still safe enough**
+A code stays valid until it's used, or until a newer one is requested for
+the same email (which immediately invalidates the old one) - useful since
+field techs/homeowners don't always open the email right away. Instead of
+a time limit, brute force is bounded by: codes being single-use, a cooldown
+between requests per email (`LOGIN_CODE_COOLDOWN_MS` in `Code.gs`), and a
+wrong-guess lockout that requires a fresh code after a few failed attempts
+(`LOGIN_MAX_FAILED_ATTEMPTS`).
+
+**Why a tampered `localStorage` can't grant a role**
+The browser only ever stores an opaque random session token (in
+`localStorage`, key `rg-session-token`) - never a role. On every page
+load, `app.js` calls `action: "whoAmI"` with that token, and the backend
+looks the token up in `Sessions`, then re-reads the *current* role from
+`Users` fresh, every time - that round trip result (`window.RainGuard.currentUser = { email, role }`) is the only thing the UI ever
+trusts. Editing `localStorage`'s role (there isn't one to edit) or any
+in-memory JS state does nothing, because nothing reads a client-supplied
+role; any future role-gated backend action must do the same re-check
+server-side rather than trusting a role sent in the request.
+
+**Other actions used by the flow**: `requestCode` (send a code),
+`verifyCode` (consume it, create a session), `touchSession` (a periodic
+heartbeat from the open tab, keeping `lastSeenAt`/`lastLogin` current
+while the app is in use, not just at login), `logout` (removes one
+session row only, leaving other devices logged in).
 
 ## Section-based home page (the "landing page" tab)
 
