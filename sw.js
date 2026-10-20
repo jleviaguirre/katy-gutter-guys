@@ -11,7 +11,7 @@
 // discarded (the browser only re-checks this file's own bytes for updates,
 // not imported scripts, so cache-name bumps alone in config.js won't trigger
 // an update without a change here too).
-var SW_BUILD = 6;
+var SW_BUILD = 7;
 
 importScripts('./config.js');
 
