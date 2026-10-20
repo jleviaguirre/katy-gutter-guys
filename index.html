@@ -23,7 +23,14 @@
         <span>(800) 555-1234</span>
       </a>
       <a class="site-btn site-btn-primary" href="#rfq">Get a Free Quote</a>
-      <button type="button" class="site-btn site-btn-ghost" id="site-login-btn">👤</button>
+      <div class="account-menu" id="account-menu">
+        <button type="button" class="site-btn site-btn-ghost" id="site-login-btn">👤</button>
+        <div class="account-menu-dropdown" id="account-menu-dropdown" hidden>
+          <a class="account-menu-item" href="#profile">Profile</a>
+          <a class="account-menu-item" href="#account">Account</a>
+          <button type="button" class="account-menu-item account-menu-logout" id="account-menu-logout">Log out</button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -45,8 +52,29 @@
           <span>Email</span>
           <input type="email" id="login-email-input" required autocomplete="email" placeholder="you@example.com">
         </label>
-        <button type="submit" class="site-btn site-btn-primary login-submit">Send code</button>
+        <button type="submit" class="site-btn site-btn-primary login-submit">Continue</button>
         <p class="login-error" id="login-email-error" hidden></p>
+      </form>
+
+      <form id="login-register-form" class="login-step" hidden>
+        <p class="login-hint">We don't have an account for <strong id="login-register-email"></strong> yet - tell us a bit about you and we'll email a one-time code.</p>
+        <label class="login-field">
+          <span>Name</span>
+          <input type="text" id="login-register-name" required autocomplete="name" placeholder="Jane Doe">
+        </label>
+        <label class="login-field">
+          <span>Phone</span>
+          <input type="tel" id="login-register-phone" autocomplete="tel" placeholder="(800) 555-1234">
+        </label>
+        <label class="login-field">
+          <span>Address</span>
+          <input type="text" id="login-register-address" autocomplete="street-address" placeholder="123 Main St, Katy, TX">
+        </label>
+        <button type="submit" class="site-btn site-btn-primary login-submit">Create account &amp; send code</button>
+        <div class="login-links">
+          <button type="button" class="login-link" id="login-register-change-email-btn">Use a different email</button>
+        </div>
+        <p class="login-error" id="login-register-error" hidden></p>
       </form>
 
       <form id="login-code-form" class="login-step" hidden>

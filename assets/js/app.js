@@ -35,6 +35,7 @@ async function init() {
   registerServiceWorker();
   wireRemoteForms();
   wireLogin();
+  wireAccountMenu();
   await restoreSession();
 
   try {
@@ -66,12 +67,12 @@ function indexModules(modules) {
 }
 
 /**
- * Passwordless login (email -> one-time code). See Code.gs's "Passwordless
- * login" section for the backend half and /docs/SETUP.md for the full
- * design. The browser only ever stores an opaque session token; the role
- * shown/used anywhere in the UI comes from whoAmI, re-read from the Users
- * sheet on every page load - never from a value the client could tamper
- * with.
+ * Passwordless login (email -> one-time code, registering new emails with a
+ * name/phone/address first). See Code.gs's "Passwordless login" section for
+ * the backend half and /docs/SETUP.md for the full design. The browser only
+ * ever stores an opaque session token; the role/profile shown/used anywhere
+ * in the UI comes from whoAmI, re-read from the Users sheet on every page
+ * load - never from a value the client could tamper with.
  */
 function wireLogin() {
   const modalEl = document.getElementById('login-modal');
@@ -80,6 +81,13 @@ function wireLogin() {
   const emailFormEl = document.getElementById('login-email-form');
   const emailInputEl = document.getElementById('login-email-input');
   const emailErrorEl = document.getElementById('login-email-error');
+  const registerFormEl = document.getElementById('login-register-form');
+  const registerEmailEl = document.getElementById('login-register-email');
+  const registerNameEl = document.getElementById('login-register-name');
+  const registerPhoneEl = document.getElementById('login-register-phone');
+  const registerAddressEl = document.getElementById('login-register-address');
+  const registerErrorEl = document.getElementById('login-register-error');
+  const registerChangeEmailBtnEl = document.getElementById('login-register-change-email-btn');
   const codeFormEl = document.getElementById('login-code-form');
   const codeInputEl = document.getElementById('login-code-input');
   const codeErrorEl = document.getElementById('login-code-error');
@@ -90,16 +98,14 @@ function wireLogin() {
   if (!loginBtnEl || !modalEl) return;
 
   loginBtnEl.addEventListener('click', () => {
-    if (session) {
-      if (confirm(`Log out of ${session.email}?`)) logout();
-      return;
-    }
+    if (session) return; // account dropdown handles the logged-in case
     openModal();
   });
 
   backdropEl.addEventListener('click', closeModal);
   closeBtnEl.addEventListener('click', closeModal);
   changeEmailBtnEl.addEventListener('click', showEmailStep);
+  registerChangeEmailBtnEl.addEventListener('click', showEmailStep);
 
   emailFormEl.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -108,14 +114,41 @@ function wireLogin() {
     if (!email) return;
     setFormBusy(emailFormEl, true);
     try {
-      await authRequest('requestCode', { email });
+      const { exists } = await authRequest('checkEmail', { email });
       pendingLoginEmail = email;
-      showCodeStep(email);
-      startResendCooldown(resendBtnEl);
+      if (exists) {
+        await authRequest('requestCode', { email });
+        showCodeStep(email);
+        startResendCooldown(resendBtnEl);
+      } else {
+        showRegisterStep(email);
+      }
     } catch (err) {
       showError(emailErrorEl, err.message);
     } finally {
       setFormBusy(emailFormEl, false);
+    }
+  });
+
+  registerFormEl.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    hideError(registerErrorEl);
+    const name = registerNameEl.value.trim();
+    if (!name) return;
+    setFormBusy(registerFormEl, true);
+    try {
+      await authRequest('requestCode', {
+        email: pendingLoginEmail,
+        name,
+        phone: registerPhoneEl.value.trim(),
+        address: registerAddressEl.value.trim()
+      });
+      showCodeStep(pendingLoginEmail);
+      startResendCooldown(resendBtnEl);
+    } catch (err) {
+      showError(registerErrorEl, err.message);
+    } finally {
+      setFormBusy(registerFormEl, false);
     }
   });
 
@@ -127,7 +160,7 @@ function wireLogin() {
     setFormBusy(codeFormEl, true);
     try {
       const data = await authRequest('verifyCode', { email: pendingLoginEmail, code });
-      applySession(data.token, data.email, data.role);
+      applySession(data.token, data);
       closeModal();
       showToast(`Logged in as ${data.email}.`);
     } catch (err) {
@@ -160,19 +193,57 @@ function wireLogin() {
 
   function showEmailStep() {
     emailFormEl.hidden = false;
+    registerFormEl.hidden = true;
     codeFormEl.hidden = true;
     hideError(emailErrorEl);
+    hideError(registerErrorEl);
     hideError(codeErrorEl);
     emailFormEl.reset();
+    registerFormEl.reset();
     codeFormEl.reset();
+  }
+
+  function showRegisterStep(email) {
+    emailFormEl.hidden = true;
+    registerFormEl.hidden = false;
+    codeFormEl.hidden = true;
+    registerEmailEl.textContent = email;
+    registerNameEl.focus();
   }
 
   function showCodeStep(email) {
     emailFormEl.hidden = true;
+    registerFormEl.hidden = true;
     codeFormEl.hidden = false;
     codeEmailEl.textContent = email;
     codeInputEl.focus();
   }
+}
+
+/** Avatar button dropdown (Profile/Account/Log out) shown once logged in. */
+function wireAccountMenu() {
+  const menuEl = document.getElementById('account-menu');
+  const dropdownEl = document.getElementById('account-menu-dropdown');
+  const logoutBtnEl = document.getElementById('account-menu-logout');
+  if (!menuEl || !dropdownEl || !loginBtnEl) return;
+
+  loginBtnEl.addEventListener('click', () => {
+    if (!session) return; // wireLogin handles the logged-out case
+    dropdownEl.hidden = !dropdownEl.hidden;
+  });
+
+  dropdownEl.querySelectorAll('a.account-menu-item').forEach((link) => {
+    link.addEventListener('click', () => { dropdownEl.hidden = true; });
+  });
+
+  logoutBtnEl.addEventListener('click', () => {
+    dropdownEl.hidden = true;
+    if (confirm(`Log out of ${session.email}?`)) logout();
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!dropdownEl.hidden && !menuEl.contains(event.target)) dropdownEl.hidden = true;
+  });
 }
 
 function startResendCooldown(buttonEl) {
@@ -226,16 +297,22 @@ async function restoreSession() {
   }
   try {
     const data = await authRequest('whoAmI', { token });
-    applySession(token, data.email, data.role);
+    applySession(token, data);
   } catch (err) {
     localStorage.removeItem(SESSION_TOKEN_KEY);
     updateLoginUI();
   }
 }
 
-function applySession(token, email, role) {
+function applySession(token, profile) {
   localStorage.setItem(SESSION_TOKEN_KEY, token);
-  session = { email, role };
+  session = {
+    email: profile.email,
+    role: profile.role,
+    name: profile.name || '',
+    phone: profile.phone || '',
+    address: profile.address || ''
+  };
   window.RainGuard.currentUser = session;
   updateLoginUI();
   startHeartbeat(token);
@@ -261,12 +338,14 @@ function startHeartbeat(token) {
 
 function updateLoginUI() {
   if (!loginBtnEl) return;
+  const dropdownEl = document.getElementById('account-menu-dropdown');
   if (session) {
     loginBtnEl.textContent = session.email.charAt(0).toUpperCase();
-    loginBtnEl.title = `Logged in as ${session.email} (${session.role}) - click to log out`;
+    loginBtnEl.title = `Logged in as ${session.email} (${session.role}) - click for account options`;
   } else {
     loginBtnEl.textContent = '👤';
     loginBtnEl.title = 'Login';
+    if (dropdownEl) dropdownEl.hidden = true;
   }
 }
 
@@ -277,6 +356,12 @@ function currentModuleKey() {
 
 function renderCurrentRoute() {
   const key = currentModuleKey();
+
+  if (key === 'profile' || key === 'account') {
+    renderAccountRoute(key);
+    return;
+  }
+
   const row = modulesByKey.get(key);
 
   if (!row) {
@@ -288,6 +373,94 @@ function renderCurrentRoute() {
   appEl.innerHTML = row.html || '';
   executeEmbeddedScripts(appEl);
   window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+}
+
+/** Client-rendered (not sheet-authored) Profile/Account pages - both
+ * require a logged-in session since they read/write the current user's own
+ * Users-tab row. */
+function renderAccountRoute(key) {
+  if (!session) {
+    window.location.hash = '#home';
+    showToast('Please log in to view that page.', 'error');
+    return;
+  }
+
+  document.title = `Gutter Guys of Katy - ${key === 'profile' ? 'Profile' : 'Account'}`;
+  if (key === 'profile') {
+    appEl.innerHTML = renderProfileHtml();
+    wireProfileForm();
+  } else {
+    appEl.innerHTML = renderAccountHtml();
+  }
+  window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+}
+
+function renderProfileHtml() {
+  return `
+    <div class="account-page">
+      <h1>Profile</h1>
+      <form id="profile-form">
+        <label class="login-field">
+          <span>Name</span>
+          <input type="text" id="profile-name-input" required autocomplete="name" value="${escapeHtml(session.name)}">
+        </label>
+        <label class="login-field">
+          <span>Email</span>
+          <input type="email" id="profile-email-input" required autocomplete="email" value="${escapeHtml(session.email)}">
+        </label>
+        <label class="login-field">
+          <span>Phone</span>
+          <input type="tel" id="profile-phone-input" autocomplete="tel" value="${escapeHtml(session.phone)}">
+        </label>
+        <label class="login-field">
+          <span>Address</span>
+          <input type="text" id="profile-address-input" autocomplete="street-address" value="${escapeHtml(session.address)}">
+        </label>
+        <button type="submit" class="site-btn site-btn-primary login-submit">Save changes</button>
+        <p class="login-error" id="profile-error" hidden></p>
+      </form>
+    </div>
+  `;
+}
+
+function renderAccountHtml() {
+  return `
+    <div class="account-page">
+      <h1>Account</h1>
+      <p class="login-hint">Account settings are coming soon.</p>
+    </div>
+  `;
+}
+
+function wireProfileForm() {
+  const formEl = document.getElementById('profile-form');
+  const errorEl = document.getElementById('profile-error');
+  if (!formEl) return;
+
+  formEl.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    hideError(errorEl);
+    const token = localStorage.getItem(SESSION_TOKEN_KEY);
+    const fields = {
+      token,
+      name: document.getElementById('profile-name-input').value.trim(),
+      email: document.getElementById('profile-email-input').value.trim(),
+      phone: document.getElementById('profile-phone-input').value.trim(),
+      address: document.getElementById('profile-address-input').value.trim()
+    };
+    setFormBusy(formEl, true);
+    try {
+      const data = await authRequest('updateProfile', fields);
+      session = { ...session, ...data };
+      window.RainGuard.currentUser = session;
+      updateLoginUI();
+      showToast('Profile updated.');
+    } catch (err) {
+      showError(errorEl, err.message);
+    } finally {
+      setFormBusy(formEl, false);
+    }
+  });
 }
 
 function renderNotFound(key) {

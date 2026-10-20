@@ -93,6 +93,9 @@ function doPost(e) {
     if (body.action === 'uploadAsset') {
       return handleUploadAsset_(body);
     }
+    if (body.action === 'checkEmail') {
+      return handleCheckEmail_(body);
+    }
     if (body.action === 'requestCode') {
       return handleRequestCode_(body);
     }
@@ -107,6 +110,9 @@ function doPost(e) {
     }
     if (body.action === 'logout') {
       return handleLogout_(body);
+    }
+    if (body.action === 'updateProfile') {
+      return handleUpdateProfile_(body);
     }
 
     var module = body.module || 'unknown';
@@ -186,9 +192,23 @@ function handleUploadAsset_(body) {
  * changed by editing the sheet, never by anything the browser sends.
  */
 
-/** POST { action: "requestCode", email } -> { ok: true } (always, to avoid
- * revealing whether an email is registered - unknown emails are simply
- * created on the spot anyway). */
+/** POST { action: "checkEmail", email } -> { ok: true, exists } so the
+ * front end knows whether to show the login code step directly or collect
+ * name/phone/address first for a brand-new account. */
+function handleCheckEmail_(body) {
+  var email = normalizeEmail_(body.email);
+  if (!isValidEmail_(email)) {
+    throw new Error('Please enter a valid email address.');
+  }
+  var sheet = getUsersSheet_();
+  var rowIndex = findRowIndexByColumn_(sheet, 'email', email);
+  return jsonOutput_({ ok: true, exists: rowIndex !== -1 });
+}
+
+/** POST { action: "requestCode", email, name?, phone?, address? } ->
+ * { ok: true }. name/phone/address are only required (and only used) when
+ * `email` isn't already in the Users tab - see handleCheckEmail_, which the
+ * front end calls first to decide whether to collect them. */
 function handleRequestCode_(body) {
   var email = normalizeEmail_(body.email);
   if (!isValidEmail_(email)) {
@@ -210,7 +230,14 @@ function handleRequestCode_(body) {
   var code = generateLoginCode_();
   var fields = { email: email, code: code, codeIssuedAt: now, failedAttempts: 0 };
   if (rowIndex === -1) {
+    var name = String(body.name || '').trim();
+    if (!name) {
+      throw new Error('Name is required.');
+    }
     fields.role = 'customer';
+    fields.name = name;
+    fields.phone = String(body.phone || '').trim();
+    fields.address = String(body.address || '').trim();
     fields.lastLogin = '';
     appendObjectAsRow_(sheet, fields);
   } else {
@@ -252,7 +279,15 @@ function handleVerifyCode_(body) {
   var token = generateSessionToken_();
   appendObjectAsRow_(getSessionsSheet_(), { token: token, email: email, createdAt: now, lastSeenAt: now });
 
-  return jsonOutput_({ ok: true, token: token, email: email, role: user.role || 'customer' });
+  return jsonOutput_({
+    ok: true,
+    token: token,
+    email: email,
+    role: user.role || 'customer',
+    name: user.name || '',
+    phone: user.phone || '',
+    address: user.address || ''
+  });
 }
 
 /** POST { action: "whoAmI", token } -> { ok: true, email, role }. The only
@@ -269,7 +304,72 @@ function handleWhoAmI_(body) {
     throw new Error('Not logged in.');
   }
   var user = rowToObjectAt_(usersSheet, userRowIndex);
-  return jsonOutput_({ ok: true, email: session.email, role: user.role || 'customer' });
+  return jsonOutput_({
+    ok: true,
+    email: session.email,
+    role: user.role || 'customer',
+    name: user.name || '',
+    phone: user.phone || '',
+    address: user.address || ''
+  });
+}
+
+/** POST { action: "updateProfile", token, name, email, phone, address } ->
+ * { ok: true, email, name, phone, address }. Email is the Users tab's
+ * primary key, so changing it moves the existing row to the new key and
+ * repoints any of this user's Sessions rows (so sessions survive an email
+ * change instead of being silently orphaned). */
+function handleUpdateProfile_(body) {
+  var session = findSessionByToken_(body.token);
+  if (!session) {
+    throw new Error('Not logged in.');
+  }
+
+  var usersSheet = getUsersSheet_();
+  var rowIndex = findRowIndexByColumn_(usersSheet, 'email', session.email);
+  if (rowIndex === -1) {
+    throw new Error('Not logged in.');
+  }
+
+  var newEmail = normalizeEmail_(body.email);
+  if (!isValidEmail_(newEmail)) {
+    throw new Error('Please enter a valid email address.');
+  }
+  var name = String(body.name || '').trim();
+  if (!name) {
+    throw new Error('Name is required.');
+  }
+  var phone = String(body.phone || '').trim();
+  var address = String(body.address || '').trim();
+
+  if (newEmail !== session.email && findRowIndexByColumn_(usersSheet, 'email', newEmail) !== -1) {
+    throw new Error('That email is already in use by another account.');
+  }
+
+  updateRowFields_(usersSheet, rowIndex, { email: newEmail, name: name, phone: phone, address: address });
+
+  if (newEmail !== session.email) {
+    retargetSessionsEmail_(session.email, newEmail);
+  }
+
+  return jsonOutput_({ ok: true, email: newEmail, name: name, phone: phone, address: address });
+}
+
+/** Updates every Sessions row for `oldEmail` to `newEmail` (see
+ * handleUpdateProfile_), so other logged-in devices keep working under the
+ * new email instead of being logged out by the change. */
+function retargetSessionsEmail_(oldEmail, newEmail) {
+  var sheet = getSessionsSheet_();
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return;
+  var headers = data[0].map(function (h) { return String(h).trim(); });
+  var emailCol = headers.indexOf('email');
+  if (emailCol === -1) return;
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][emailCol] || '').trim().toLowerCase() === oldEmail) {
+      sheet.getRange(i + 1, emailCol + 1).setValue(newEmail);
+    }
+  }
 }
 
 /** POST { action: "touchSession", token } -> { ok: true }. Called
@@ -343,13 +443,18 @@ function sendLoginCodeEmail_(email, code) {
   MailApp.sendEmail(email, subject, body);
 }
 
+/** Run manually from the editor dropdown to trigger the mail-scope auth prompt. */
+function testAuthorizeMailScope() {
+  MailApp.sendEmail('YOUR-EMAIL@example.com', 'Auth test', 'If you got this, mail scope is authorized.');
+}
+
 /** Gets (creating if needed) the "Users" tab backing passwordless login. */
 function getUsersSheet_() {
   var ss = getSpreadsheet_();
   var sheet = ss.getSheetByName(USERS_SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(USERS_SHEET_NAME);
-    sheet.appendRow(['email', 'role', 'code', 'codeIssuedAt', 'lastLogin', 'failedAttempts']);
+    sheet.appendRow(['email', 'role', 'name', 'phone', 'address', 'code', 'codeIssuedAt', 'lastLogin', 'failedAttempts']);
   }
   return sheet;
 }

@@ -178,6 +178,49 @@ body {
 .login-error { margin: 0.75rem 0 0; font-size: 0.8rem; color: #b42318; }
 .login-error[hidden] { display: none; }
 
+/* Account menu (Profile/Account/Log out) dropdown under the avatar button. */
+.account-menu { position: relative; }
+
+.account-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 40;
+  min-width: 10rem;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 24px rgba(17, 29, 41, 0.15);
+  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.account-menu-dropdown[hidden] { display: none; }
+
+.account-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+
+.account-menu-item:hover { background: var(--color-bg); }
+.account-menu-logout { color: #b42318; }
+
+/* Client-rendered Profile/Account pages (not sheet-authored content). */
+.account-page { padding: 1.5rem 1.25rem 3rem; max-width: 420px; margin: 0 auto; }
+.account-page h1 { font-size: 1.3rem; margin: 0 0 1.25rem; }
+
 #site-footer {
   text-align: center;
   padding: 1rem;
