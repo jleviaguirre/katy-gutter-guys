@@ -141,10 +141,12 @@ function wireLogin() {
     const email = emailInputEl.value.trim();
     if (!email) return;
     setFormBusy(emailFormEl, true);
+    setSubmitBusy(emailFormEl, 'Checking...');
     try {
       const { exists } = await authRequest('checkEmail', { email });
       pendingLoginEmail = email;
       if (exists) {
+        setSubmitBusy(emailFormEl, 'Sending code...');
         await authRequest('requestCode', { email });
         showCodeStep(email);
         startResendCooldown(resendBtnEl);
@@ -155,6 +157,7 @@ function wireLogin() {
       showError(emailErrorEl, err.message);
     } finally {
       setFormBusy(emailFormEl, false);
+      setSubmitBusy(emailFormEl, false);
     }
   });
 
@@ -164,6 +167,7 @@ function wireLogin() {
     const name = registerNameEl.value.trim();
     if (!name) return;
     setFormBusy(registerFormEl, true);
+    setSubmitBusy(registerFormEl, 'Sending code...');
     try {
       await authRequest('requestCode', {
         email: pendingLoginEmail,
@@ -177,6 +181,7 @@ function wireLogin() {
       showError(registerErrorEl, err.message);
     } finally {
       setFormBusy(registerFormEl, false);
+      setSubmitBusy(registerFormEl, false);
     }
   });
 
@@ -186,6 +191,7 @@ function wireLogin() {
     const code = codeInputEl.value.trim();
     if (!code) return;
     setFormBusy(codeFormEl, true);
+    setSubmitBusy(codeFormEl, 'Verifying...');
     try {
       const data = await authRequest('verifyCode', { email: pendingLoginEmail, code });
       applySession(data.token, data);
@@ -197,6 +203,7 @@ function wireLogin() {
       showError(codeErrorEl, err.message);
     } finally {
       setFormBusy(codeFormEl, false);
+      setSubmitBusy(codeFormEl, false);
     }
   });
 
@@ -372,6 +379,22 @@ function startResendCooldown(buttonEl) {
 
 function setFormBusy(formEl, busy) {
   formEl.querySelectorAll('button').forEach((btn) => { btn.disabled = busy; });
+}
+
+/** Relabels a form's submit button while a request is in flight (e.g.
+ * "Continue" -> "Sending code...") so it's obvious something is happening
+ * and there's nothing left to click - pass `false` to restore its original
+ * label. Submit buttons are already disabled by setFormBusy; this is just
+ * the visible feedback on top of that. */
+function setSubmitBusy(formEl, busyLabel) {
+  const btn = formEl.querySelector('button[type="submit"]');
+  if (!btn) return;
+  if (busyLabel) {
+    if (btn.dataset.defaultLabel === undefined) btn.dataset.defaultLabel = btn.textContent;
+    btn.textContent = busyLabel;
+  } else if (btn.dataset.defaultLabel !== undefined) {
+    btn.textContent = btn.dataset.defaultLabel;
+  }
 }
 
 function showError(el, message) {
