@@ -13,10 +13,14 @@ const { API_BASE_URL, DEFAULT_MODULE } = window.APP_CONFIG;
 const appEl = document.getElementById('app');
 const toastEl = document.getElementById('toast');
 const loginBtnEl = document.getElementById('site-login-btn');
+const navWrapperEl = document.getElementById('site-nav-wrapper');
+const navToggleEl = document.getElementById('site-nav-toggle');
+const subnavInnerEl = document.getElementById('site-subnav-inner');
 
 const SESSION_TOKEN_KEY = 'rg-session-token';
 const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 30 * 1000;
+const SCROLL_HIDE_THRESHOLD_PX = 80; // don't hide the nav until scrolled past this
 
 /** module name (lowercase) -> module row from the sheet */
 let modulesByKey = new Map();
@@ -36,19 +40,34 @@ async function init() {
   wireRemoteForms();
   wireLogin();
   wireAccountMenu();
+  wireSiteNav();
   await restoreSession();
 
   try {
-    const modules = await fetchModules();
-    indexModules(modules);
-    window.addEventListener('hashchange', renderCurrentRoute);
+    await reloadModules();
+    window.addEventListener('hashchange', () => {
+      renderCurrentRoute();
+      renderSiteNav();
+    });
     renderCurrentRoute();
   } catch (err) {
     renderFatalError(err);
   }
 }
 
+/**
+ * Logged-out visitors use the plain cached GET (only public, blank-`role`
+ * modules - see Code.gs's doGet docs). Logged-in users go through the
+ * "listModules" POST action instead, which is never edge-cached and
+ * returns every module their role is allowed to see - the token never
+ * travels in a cacheable/loggable GET query string.
+ */
 async function fetchModules() {
+  const token = localStorage.getItem(SESSION_TOKEN_KEY);
+  if (token) {
+    const data = await authRequest('listModules', { token });
+    return data.modules || [];
+  }
   const response = await fetch(`${API_BASE_URL}/`, { method: 'GET' });
   if (!response.ok) {
     throw new Error(`Backend responded with ${response.status}`);
@@ -58,6 +77,15 @@ async function fetchModules() {
     throw new Error(data.error || 'Unknown backend error');
   }
   return data.modules || [];
+}
+
+/** Re-fetches the (role-filtered) module list and rebuilds the sub-nav -
+ * called on initial load and again after login/logout, since the set of
+ * modules a viewer can see depends on who's signed in. */
+async function reloadModules() {
+  const modules = await fetchModules();
+  indexModules(modules);
+  renderSiteNav();
 }
 
 function indexModules(modules) {
@@ -163,6 +191,8 @@ function wireLogin() {
       applySession(data.token, data);
       closeModal();
       showToast(`Logged in as ${data.email}.`);
+      await reloadModules();
+      renderCurrentRoute();
     } catch (err) {
       showError(codeErrorEl, err.message);
     } finally {
@@ -243,6 +273,83 @@ function wireAccountMenu() {
 
   document.addEventListener('click', (event) => {
     if (!dropdownEl.hidden && !menuEl.contains(event.target)) dropdownEl.hidden = true;
+  });
+}
+
+/**
+ * The sub-nav (built in renderSiteNav) collapses behind the hamburger
+ * toggle on mobile (see styles.css's "max-width: 768px" block) instead of
+ * always showing as its own line - this wires that toggle plus the
+ * shared hide-on-scroll-down/show-on-scroll-up behavior for the header +
+ * sub-nav, which always move together as one unit.
+ */
+function wireSiteNav() {
+  if (navToggleEl && navWrapperEl) {
+    navToggleEl.addEventListener('click', () => {
+      const isOpen = navWrapperEl.classList.toggle('site-nav-open');
+      navToggleEl.setAttribute('aria-expanded', String(isOpen));
+    });
+  }
+
+  let lastScrollY = window.scrollY;
+  window.addEventListener('scroll', () => {
+    if (!navWrapperEl) return;
+    const currentScrollY = window.scrollY;
+    const isNavOpen = navWrapperEl.classList.contains('site-nav-open');
+    if (!isNavOpen) {
+      if (currentScrollY > lastScrollY && currentScrollY > SCROLL_HIDE_THRESHOLD_PX) {
+        navWrapperEl.classList.add('site-nav-collapsed');
+      } else {
+        navWrapperEl.classList.remove('site-nav-collapsed');
+      }
+    }
+    lastScrollY = currentScrollY;
+  }, { passive: true });
+}
+
+/** `showInNav` comes from a Sheet cell, so accept any of the common
+ * spreadsheet-ish truthy spellings instead of just a strict boolean. */
+function isTruthyCell(value) {
+  const normalized = String(value == null ? '' : value).trim().toLowerCase();
+  return ['true', 'yes', 'y', '1', 'x'].includes(normalized);
+}
+
+/**
+ * Builds the sub-nav from the Modules sheet: sorted by `order`, limited to
+ * rows with `showInNav` checked, labeled with `navLabel` (falling back to
+ * `title`/the module key) and tooltipped with `description`. Modules the
+ * current viewer isn't allowed to see never even reach the browser (see
+ * Code.gs's listModules/doGet role filtering), so no extra role check is
+ * needed here - whatever is in modulesByKey is already visible to them.
+ */
+function renderSiteNav() {
+  if (!subnavInnerEl) return;
+  const currentKey = currentModuleKey();
+
+  const parseOrder = (value) => (value === '' || value == null ? NaN : Number(value));
+  const items = Array.from(modulesByKey.values())
+    .filter((row) => isTruthyCell(row.showInNav))
+    .sort((a, b) => {
+      const orderA = parseOrder(a.order);
+      const orderB = parseOrder(b.order);
+      if (Number.isFinite(orderA) && Number.isFinite(orderB) && orderA !== orderB) return orderA - orderB;
+      if (Number.isFinite(orderA) !== Number.isFinite(orderB)) return Number.isFinite(orderA) ? -1 : 1;
+      return String(a.navLabel || a.module).localeCompare(String(b.navLabel || b.module));
+    });
+
+  subnavInnerEl.innerHTML = '';
+  items.forEach((row) => {
+    const link = document.createElement('a');
+    const key = String(row.module).toLowerCase();
+    link.className = 'site-subnav-link' + (key === currentKey ? ' is-active' : '');
+    link.href = `#${row.module}`;
+    link.textContent = row.navLabel || row.title || row.module;
+    if (row.description) link.title = row.description;
+    link.addEventListener('click', () => {
+      navWrapperEl?.classList.remove('site-nav-open');
+      navToggleEl?.setAttribute('aria-expanded', 'false');
+    });
+    subnavInnerEl.appendChild(link);
   });
 }
 
@@ -327,6 +434,12 @@ async function logout() {
   updateLoginUI();
   showToast('Logged out.');
   if (token) authRequest('logout', { token }).catch(() => {});
+  await reloadModules();
+  if (currentModuleKey() === 'profile' || currentModuleKey() === 'account') {
+    window.location.hash = '#home';
+  } else {
+    renderCurrentRoute();
+  }
 }
 
 function startHeartbeat(token) {
@@ -375,9 +488,13 @@ function renderCurrentRoute() {
   window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
 }
 
-/** Client-rendered (not sheet-authored) Profile/Account pages - both
- * require a logged-in session since they read/write the current user's own
- * Users-tab row. */
+/** Client-rendered Profile/Account pages - both require a logged-in session
+ * since they read/write the current user's own Users-tab row. Their HTML
+ * comes from the Modules sheet (module = "profile"/"account", same as any
+ * other module) when a row for it exists, falling back to a built-in
+ * default otherwise; either way, `hydrateProfileForm` fills the actual
+ * field values from `session` client-side, since sheet-authored HTML has
+ * no way to know the logged-in user's data at authoring time. */
 function renderAccountRoute(key) {
   if (!session) {
     window.location.hash = '#home';
@@ -385,36 +502,41 @@ function renderAccountRoute(key) {
     return;
   }
 
-  document.title = `Gutter Guys of Katy - ${key === 'profile' ? 'Profile' : 'Account'}`;
+  const row = modulesByKey.get(key);
+  document.title = row && row.title ? `Gutter Guys of Katy - ${row.title}` : `Gutter Guys of Katy - ${key === 'profile' ? 'Profile' : 'Account'}`;
+
   if (key === 'profile') {
-    appEl.innerHTML = renderProfileHtml();
+    appEl.innerHTML = row ? row.html : defaultProfileHtml();
+    if (row) executeEmbeddedScripts(appEl);
+    hydrateProfileForm();
     wireProfileForm();
   } else {
-    appEl.innerHTML = renderAccountHtml();
+    appEl.innerHTML = row ? row.html : defaultAccountHtml();
+    if (row) executeEmbeddedScripts(appEl);
   }
   window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
 }
 
-function renderProfileHtml() {
+function defaultProfileHtml() {
   return `
     <div class="account-page">
       <h1>Profile</h1>
       <form id="profile-form">
         <label class="login-field">
           <span>Name</span>
-          <input type="text" id="profile-name-input" required autocomplete="name" value="${escapeHtml(session.name)}">
+          <input type="text" id="profile-name-input" required autocomplete="name">
         </label>
         <label class="login-field">
           <span>Email</span>
-          <input type="email" id="profile-email-input" required autocomplete="email" value="${escapeHtml(session.email)}">
+          <input type="email" id="profile-email-input" required autocomplete="email">
         </label>
         <label class="login-field">
           <span>Phone</span>
-          <input type="tel" id="profile-phone-input" autocomplete="tel" value="${escapeHtml(session.phone)}">
+          <input type="tel" id="profile-phone-input" autocomplete="tel">
         </label>
         <label class="login-field">
           <span>Address</span>
-          <input type="text" id="profile-address-input" autocomplete="street-address" value="${escapeHtml(session.address)}">
+          <input type="text" id="profile-address-input" autocomplete="street-address">
         </label>
         <button type="submit" class="site-btn site-btn-primary login-submit">Save changes</button>
         <p class="login-error" id="profile-error" hidden></p>
@@ -423,13 +545,28 @@ function renderProfileHtml() {
   `;
 }
 
-function renderAccountHtml() {
+function defaultAccountHtml() {
   return `
     <div class="account-page">
       <h1>Account</h1>
       <p class="login-hint">Account settings are coming soon.</p>
     </div>
   `;
+}
+
+/** Fills the profile form's current values from `session` - works whether
+ * the surrounding markup came from the Modules sheet or defaultProfileHtml,
+ * since both use the same field IDs. Safe to call even if some/all of
+ * those fields aren't present in the markup. */
+function hydrateProfileForm() {
+  const setValue = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value || '';
+  };
+  setValue('profile-name-input', session.name);
+  setValue('profile-email-input', session.email);
+  setValue('profile-phone-input', session.phone);
+  setValue('profile-address-input', session.address);
 }
 
 function wireProfileForm() {

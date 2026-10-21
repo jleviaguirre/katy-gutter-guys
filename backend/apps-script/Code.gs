@@ -2,8 +2,9 @@
  * Gutter Guys of Katy - Google Apps Script backend
  * ---------------------------------------------------------------------------
  * Serves page content stored in a Google Sheet ("Modules" tab: module, html,
- * title, navLabel, order, showInNav - any extra columns are passed through
- * as-is), serves the "landing page" tab (section, content, assets) used to
+ * title, navLabel, order, showInNav, role, description - any extra columns
+ * are passed through as-is), serves the "landing page" tab (section,
+ * content, assets) used to
  * build the home page from composable sections, accepts form submissions
  * from the site (storing them in a "Submissions" tab and optionally
  * uploading attached files to Google Drive), and runs a passwordless,
@@ -33,6 +34,13 @@ var LOGIN_MAX_FAILED_ATTEMPTS = 5; // wrong-code attempts allowed before a fresh
  * GET /exec?view=landing       -> { sections: [...] } (the "landing page" tab,
  *                                  in row order, with assets resolved to a
  *                                  usable embed URL + detected type)
+ *
+ * GET is cached at the Cloudflare edge by full URL (see worker.js), so it
+ * never takes/trusts a session token (tokens don't belong in a cacheable,
+ * loggable URL) - it only ever returns modules whose `role` column is
+ * blank (public). Logged-in users get their full, role-filtered module
+ * list from the POST "listModules" action below instead, which is never
+ * edge-cached.
  */
 function doGet(e) {
   try {
@@ -44,7 +52,7 @@ function doGet(e) {
 
     var sheet = getSheet_(MODULES_SHEET_NAME);
     var modules = sheetToObjects_(sheet).filter(function (row) {
-      return row.module; // skip blank rows
+      return row.module && canViewModule_(row.role, null); // skip blank rows + non-public modules
     });
 
     if (params.module) {
@@ -79,6 +87,11 @@ function doGet(e) {
  * Gutter Survey module) so each asset can be uploaded as its own small
  * request/retry instead of bundling everything into one large payload.
  *
+ * POST /exec with { action: "listModules", token? } -> { ok: true, modules }
+ * Role-filtered module list for the signed-in nav menu - see doGet's docs
+ * for why this is a separate, uncached POST action instead of a query
+ * param on GET.
+ *
  * POST /exec with { action: "requestCode" | "verifyCode" | "whoAmI" |
  * "touchSession" | "logout", ... } - passwordless login. See the
  * "Passwordless login" section below each handler, and /docs/SETUP.md.
@@ -92,6 +105,9 @@ function doPost(e) {
 
     if (body.action === 'uploadAsset') {
       return handleUploadAsset_(body);
+    }
+    if (body.action === 'listModules') {
+      return handleListModules_(body);
     }
     if (body.action === 'checkEmail') {
       return handleCheckEmail_(body);
@@ -163,6 +179,49 @@ function handleUploadAsset_(body) {
   }
   return jsonOutput_({ ok: true, url: url });
 }
+
+/** POST { action: "listModules", token? } -> { ok: true, modules: [...] }.
+ * Role-filtered equivalent of GET /exec for logged-in users: the token is
+ * never put in a cacheable/loggable URL (see doGet's docs), and the result
+ * is never edge-cached, so it can safely be personalized per viewer. */
+function handleListModules_(body) {
+  var viewerRole = resolveViewerRole_(body.token);
+  var sheet = getSheet_(MODULES_SHEET_NAME);
+  var modules = sheetToObjects_(sheet).filter(function (row) {
+    return row.module && canViewModule_(row.role, viewerRole);
+  });
+  return jsonOutput_({ ok: true, modules: modules });
+}
+
+/** Resolves a token to the Users-tab `role` of the account it belongs to.
+ * Returns null for a missing/invalid/expired token (treated as a guest -
+ * public modules only), or '' for a valid but unverified (blank-role)
+ * account, which is treated the same as "customer" by canViewModule_. */
+function resolveViewerRole_(token) {
+  var session = findSessionByToken_(token);
+  if (!session) return null;
+  var usersSheet = getUsersSheet_();
+  var rowIndex = findRowIndexByColumn_(usersSheet, 'email', session.email);
+  if (rowIndex === -1) return null;
+  var user = rowToObjectAt_(usersSheet, rowIndex);
+  return user.role || '';
+}
+
+/** Role hierarchy for the Modules tab's `role` column: blank = public
+ * (everyone, including guests); otherwise admin sees everything, a
+ * technician sees everything except admin-only modules, and a
+ * customer/blank-role account sees everything except technician- and
+ * admin-only modules. Keep in sync with assets/js/app.js's copy. */
+var MODULE_ROLE_RANK_ = { customer: 1, technician: 2, admin: 3 };
+
+function canViewModule_(moduleRole, viewerRole) {
+  var required = String(moduleRole || '').trim().toLowerCase();
+  if (!required) return true; // public module
+  if (viewerRole === null || viewerRole === undefined) return false; // guest
+  var viewerRank = MODULE_ROLE_RANK_[String(viewerRole).toLowerCase()] || 1; // blank/unrecognized role = customer-level
+  return viewerRank >= (MODULE_ROLE_RANK_[required] || 0);
+}
+
 
 /**
  * Passwordless login

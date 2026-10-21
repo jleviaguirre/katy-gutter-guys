@@ -25,14 +25,22 @@ body {
   /* padding: 1.5rem 1.25rem 3rem; */
 }
 
-/* Fixed site header - present on every page (same idea as #site-footer):
- * logo, phone number, "Get a Free Quote", and a "Login" placeholder. The
- * in-page menu (Services/How It Works/etc.) lives on the landing page
- * itself instead - see docs/modules/landing-page-rows.md. */
-#site-header {
+/* Fixed site header + dynamic sub-nav, wrapped together so they hide/show
+ * as one unit on scroll (see app.js's wireScrollNav) - a logo/phone/"Get a
+ * Free Quote"/login line, plus a second line of module links built from
+ * the Modules sheet (module/html/title/navLabel/order/showInNav/role/
+ * description columns - see /docs/SETUP.md). */
+#site-nav-wrapper {
   position: sticky;
   top: 0;
   z-index: 30;
+  background: #ffffff;
+  transition: transform 0.25s ease;
+}
+
+#site-nav-wrapper.site-nav-collapsed { transform: translateY(-100%); }
+
+#site-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -42,6 +50,50 @@ body {
   border-bottom: 1px solid var(--color-border);
   flex-wrap: wrap;
 }
+
+.site-nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--color-text);
+  cursor: pointer;
+  padding: 0.3rem;
+}
+
+.site-subnav {
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.site-subnav-inner {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.6rem 1.25rem;
+  overflow-x: auto;
+}
+
+.site-subnav-inner:empty { display: none; }
+
+.site-subnav-link {
+  display: inline-block;
+  color: var(--color-text);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  padding: 0.15rem 0;
+  border-bottom: 2px solid transparent;
+}
+
+.site-subnav-link:hover,
+.site-subnav-link.is-active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
 
 .site-brand {
   display: flex;
@@ -98,6 +150,47 @@ body {
 @media (max-width: 560px) {
   .site-actions .site-phone span { display: none; }
 }
+
+/* Below this width the sub-nav collapses behind the hamburger toggle and
+ * is combined with it into a single dropdown panel instead of its own
+ * always-visible second line (desktop keeps the two-line layout above). */
+@media (max-width: 768px) {
+  .site-nav-toggle { display: inline-flex; }
+
+  .site-subnav {
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    max-height: calc(100vh - 100%);
+    overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(17, 29, 41, 0.15);
+  }
+
+  #site-nav-wrapper.site-nav-open .site-subnav { display: block; }
+
+  .site-subnav-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 0.35rem;
+    overflow-x: visible;
+  }
+
+  .site-subnav-link {
+    padding: 0.75rem 0.9rem;
+    border-bottom: 1px solid var(--color-border);
+    border-bottom-width: 1px;
+  }
+
+  .site-subnav-link.is-active,
+  .site-subnav-link:hover {
+    background: #ffffff;
+    border-bottom-color: var(--color-border);
+  }
+}
+
 
 /* Passwordless login modal (email -> code steps). Plain markup/CSS in the
  * app shell, not sheet-authored, since every page needs the same login UI

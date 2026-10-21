@@ -21,9 +21,21 @@ row; add any columns you like, but these are recognized by the app:
 | `module`    | yes      | route key, matches the URL hash, e.g. `home`, `about`      |
 | `html`      | yes      | the HTML rendered into `<main id="app">` for that module   |
 | `title`     | no       | sets `<title>` while that module is active                 |
-| `navLabel`  | no       | nav link text (defaults to `module`)                       |
-| `order`     | no       | numeric sort order for the nav                             |
-| `showInNav` | no       | set to `FALSE` to hide a module from the nav (still routable) |
+| `navLabel`  | no       | sub-nav link text (defaults to `title`, then `module`)      |
+| `order`     | no       | numeric sort order for the sub-nav (blank sorts last, alphabetically) |
+| `showInNav` | no       | set to `TRUE`/`yes`/`1`/`x` to show this module as a sub-nav link (still routable either way) |
+| `role`      | no       | who can see/load this module: blank = everyone (incl. logged-out visitors); `customer` = any logged-in account; `technician` = technician/admin only; `admin` = admin only (see "Passwordless login" below for the role hierarchy) |
+| `description` | no     | sub-nav link tooltip (`title` attribute)                    |
+
+The sub-nav is a second row below the main header (its own line on desktop,
+collapsed behind a hamburger toggle on mobile - see `styles.css`), rebuilt
+from these columns every time the module list loads/changes (including
+right after login/logout, since `role` affects which rows a viewer gets
+back at all - see the `role` column and "Passwordless login" below).
+`module = profile` / `module = account` rows are optional: if present they
+replace the built-in default Profile/Account page HTML (the actual field
+values are always filled in client-side from the logged-in session, never
+from the sheet).
 
 A second tab named **`Submissions`** is created automatically the first time
 a form is submitted - you don't need to create it yourself.
@@ -369,9 +381,14 @@ login" section.
   is not yet a recognized customer. **Someone must manually set `role` to
   `customer` (or `technician`/`admin`) in the sheet** to grant it anything
   beyond the default blank-role experience - the login code itself never
-  assigns or upgrades a role. Blank/`customer`/`technician`/`admin` are also
-  the four roles planned for gating access to future modules from the nav,
-  so keep using exactly these values.
+  assigns or upgrades a role. These are also the exact values the `Modules`
+  tab's `role` column uses to gate each module: `admin` sees every module;
+  `technician` sees everything except `admin`-only modules; a blank-role or
+  `customer` account sees everything except `technician`/`admin`-only
+  modules; logged-out visitors only ever see blank-`role` (public) modules.
+  This is enforced server-side in `Code.gs` (`doGet`/`listModules`), so a
+  restricted module's HTML is never even sent to a browser that isn't
+  allowed to see it - not just hidden from the nav.
 - **`Sessions`** tab (auto-created): `token | email | createdAt |
   lastSeenAt` - one row per logged-in device. Deleting a row here force-logs-out
   that one device; deleting all rows for an email logs it out everywhere.
