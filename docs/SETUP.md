@@ -359,13 +359,19 @@ password, ever. The backend half lives in `Code.gs`'s "Passwordless
 login" section.
 
 **Sheets involved**
-- **`Users`** tab: `email | role | code | codeIssuedAt | lastLogin |
-  failedAttempts` (the last four columns are added automatically the
-  first time they're needed). `role` is one of `admin`, `technician`, or
-  `customer`. Any email can request a code; an email that isn't already a
-  row is auto-created with `role = customer` (self-serve for homeowners).
-  **`admin` and `technician` rows must be added/edited by hand in the
-  sheet** - the login code itself never assigns or upgrades a role.
+- **`Users`** tab: `email | role | name | phone | address | code |
+  codeIssuedAt | lastLogin | failedAttempts` (every column past `email` is
+  added automatically the first time it's needed). `role` is one of blank
+  (unverified), `customer`, `technician`, or `admin`. Any email can request
+  a code; an email that isn't already a row is auto-created with a
+  **blank** role and the name/phone/address it submitted on the
+  registration step - it can log in (after verifying the emailed code) but
+  is not yet a recognized customer. **Someone must manually set `role` to
+  `customer` (or `technician`/`admin`) in the sheet** to grant it anything
+  beyond the default blank-role experience - the login code itself never
+  assigns or upgrades a role. Blank/`customer`/`technician`/`admin` are also
+  the four roles planned for gating access to future modules from the nav,
+  so keep using exactly these values.
 - **`Sessions`** tab (auto-created): `token | email | createdAt |
   lastSeenAt` - one row per logged-in device. Deleting a row here force-logs-out
   that one device; deleting all rows for an email logs it out everywhere.

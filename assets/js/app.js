@@ -341,7 +341,7 @@ function updateLoginUI() {
   const dropdownEl = document.getElementById('account-menu-dropdown');
   if (session) {
     loginBtnEl.textContent = session.email.charAt(0).toUpperCase();
-    loginBtnEl.title = `Logged in as ${session.email} (${session.role}) - click for account options`;
+    loginBtnEl.title = `Logged in as ${session.email} (${session.role || 'unverified'}) - click for account options`;
   } else {
     loginBtnEl.textContent = '👤';
     loginBtnEl.title = 'Login';

@@ -169,11 +169,14 @@ function handleUploadAsset_(body) {
  * ---------------------------------------------------------------------------
  * A "Users" tab (email, role, code - plus codeIssuedAt/lastLogin/
  * failedAttempts, added automatically on first use) is the source of truth
- * for who can log in and with what role ("admin" | "technician" |
- * "customer"). Any email can request a code; unknown emails are
- * auto-created as role "customer" (self-serve homeowners) - "admin" and
- * "technician" rows must be added to the sheet by hand, since this code
- * never assigns or upgrades a role itself.
+ * for who can log in and with what role ("" (blank) | "customer" |
+ * "technician" | "admin"). Any email can request a code; unknown emails
+ * are auto-created with a blank role (unverified - they can log in once
+ * they verify their email via the code, but are not yet a recognized
+ * "customer") - someone must manually set their role to "customer" (or
+ * "technician"/"admin") in the sheet to grant any access beyond the
+ * default blank-role experience; this code never assigns or upgrades a
+ * role itself.
  *
  * A requested code has no time-based expiry - it stays valid until it is
  * used, or until a newer code is requested for the same email (which
@@ -234,7 +237,8 @@ function handleRequestCode_(body) {
     if (!name) {
       throw new Error('Name is required.');
     }
-    fields.role = 'customer';
+    // role is left blank on purpose - a brand-new signup is unverified until
+    // someone manually marks them "customer" (or higher) in the sheet.
     fields.name = name;
     fields.phone = String(body.phone || '').trim();
     fields.address = String(body.address || '').trim();
@@ -283,7 +287,7 @@ function handleVerifyCode_(body) {
     ok: true,
     token: token,
     email: email,
-    role: user.role || 'customer',
+    role: user.role || '',
     name: user.name || '',
     phone: user.phone || '',
     address: user.address || ''
@@ -307,7 +311,7 @@ function handleWhoAmI_(body) {
   return jsonOutput_({
     ok: true,
     email: session.email,
-    role: user.role || 'customer',
+    role: user.role || '',
     name: user.name || '',
     phone: user.phone || '',
     address: user.address || ''
