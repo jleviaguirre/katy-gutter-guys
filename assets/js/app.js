@@ -14,7 +14,6 @@ const appEl = document.getElementById('app');
 const toastEl = document.getElementById('toast');
 const loginBtnEl = document.getElementById('site-login-btn');
 const navWrapperEl = document.getElementById('site-nav-wrapper');
-const navToggleEl = document.getElementById('site-nav-toggle');
 const subnavInnerEl = document.getElementById('site-subnav-inner');
 
 const SESSION_TOKEN_KEY = 'rg-session-token';
@@ -257,7 +256,12 @@ function wireLogin() {
   }
 }
 
-/** Avatar button dropdown (Profile/Account/Log out) shown once logged in. */
+/**
+ * Avatar button dropdown - doubles as the mobile/desktop "hamburger" menu
+ * once logged in (modules sub-nav + Profile/Account/Log out all in one
+ * panel), since a guest has nothing in it worth showing (see wireLogin,
+ * which handles the logged-out click instead).
+ */
 function wireAccountMenu() {
   const menuEl = document.getElementById('account-menu');
   const dropdownEl = document.getElementById('account-menu-dropdown');
@@ -266,44 +270,39 @@ function wireAccountMenu() {
 
   loginBtnEl.addEventListener('click', () => {
     if (!session) return; // wireLogin handles the logged-out case
-    dropdownEl.hidden = !dropdownEl.hidden;
+    setDropdownOpen(dropdownEl.hidden);
   });
 
   dropdownEl.querySelectorAll('a.account-menu-item').forEach((link) => {
-    link.addEventListener('click', () => { dropdownEl.hidden = true; });
+    link.addEventListener('click', () => setDropdownOpen(false));
   });
 
   logoutBtnEl.addEventListener('click', () => {
-    dropdownEl.hidden = true;
+    setDropdownOpen(false);
     if (confirm(`Log out of ${session.email}?`)) logout();
   });
 
   document.addEventListener('click', (event) => {
-    if (!dropdownEl.hidden && !menuEl.contains(event.target)) dropdownEl.hidden = true;
+    if (!dropdownEl.hidden && !menuEl.contains(event.target)) setDropdownOpen(false);
   });
+
+  function setDropdownOpen(open) {
+    dropdownEl.hidden = !open;
+    loginBtnEl.setAttribute('aria-expanded', String(open));
+  }
 }
 
-/**
- * The sub-nav (built in renderSiteNav) collapses behind the hamburger
- * toggle on mobile (see styles.css's "max-width: 768px" block) instead of
- * always showing as its own line - this wires that toggle plus the
- * shared hide-on-scroll-down/show-on-scroll-up behavior for the header +
- * sub-nav, which always move together as one unit.
- */
+/** Hide-on-scroll-down/show-on-scroll-up behavior for the header, paused
+ * while the account/modules dropdown is open so it can't slide away
+ * mid-click. */
 function wireSiteNav() {
-  if (navToggleEl && navWrapperEl) {
-    navToggleEl.addEventListener('click', () => {
-      const isOpen = navWrapperEl.classList.toggle('site-nav-open');
-      navToggleEl.setAttribute('aria-expanded', String(isOpen));
-    });
-  }
-
+  const dropdownEl = document.getElementById('account-menu-dropdown');
   let lastScrollY = window.scrollY;
   window.addEventListener('scroll', () => {
     if (!navWrapperEl) return;
     const currentScrollY = window.scrollY;
-    const isNavOpen = navWrapperEl.classList.contains('site-nav-open');
-    if (!isNavOpen) {
+    const isMenuOpen = dropdownEl && !dropdownEl.hidden;
+    if (!isMenuOpen) {
       if (currentScrollY > lastScrollY && currentScrollY > SCROLL_HIDE_THRESHOLD_PX) {
         navWrapperEl.classList.add('site-nav-collapsed');
       } else {
@@ -353,8 +352,9 @@ function renderSiteNav() {
     link.textContent = row.navLabel || row.title || row.module;
     if (row.description) link.title = row.description;
     link.addEventListener('click', () => {
-      navWrapperEl?.classList.remove('site-nav-open');
-      navToggleEl?.setAttribute('aria-expanded', 'false');
+      const dropdownEl = document.getElementById('account-menu-dropdown');
+      if (dropdownEl) dropdownEl.hidden = true;
+      loginBtnEl?.setAttribute('aria-expanded', 'false');
     });
     subnavInnerEl.appendChild(link);
   });
@@ -479,8 +479,9 @@ function updateLoginUI() {
     loginBtnEl.textContent = session.email.charAt(0).toUpperCase();
     loginBtnEl.title = `Logged in as ${session.email} (${session.role || 'unverified'}) - click for account options`;
   } else {
-    loginBtnEl.textContent = '👤';
+    loginBtnEl.innerHTML = '<span aria-hidden="true">👤</span><span class="site-login-label">Login</span>';
     loginBtnEl.title = 'Login';
+    loginBtnEl.setAttribute('aria-expanded', 'false');
     if (dropdownEl) dropdownEl.hidden = true;
   }
 }

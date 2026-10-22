@@ -25,22 +25,19 @@
         </a>
         <a class="site-btn site-btn-primary" href="#rfq">Free Quote</a>
         <div class="account-menu" id="account-menu">
-          <button type="button" class="site-btn site-btn-ghost" id="site-login-btn">👤</button>
+          <button type="button" class="site-btn site-btn-ghost" id="site-login-btn" aria-haspopup="true" aria-expanded="false" aria-controls="account-menu-dropdown">
+            <span aria-hidden="true">👤</span><span class="site-login-label">Login</span>
+          </button>
           <div class="account-menu-dropdown" id="account-menu-dropdown" hidden>
+            <div class="account-menu-modules" id="site-subnav-inner"></div>
+            <div class="account-menu-divider"></div>
             <a class="account-menu-item" href="#profile">Profile</a>
             <a class="account-menu-item" href="#account">Account</a>
             <button type="button" class="account-menu-item account-menu-logout" id="account-menu-logout">Log out</button>
           </div>
         </div>
-        <button type="button" class="site-nav-toggle" id="site-nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="site-subnav">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
-        </button>
       </div>
     </header>
-
-    <nav id="site-subnav" class="site-subnav" aria-label="Site sections">
-      <div class="site-subnav-inner" id="site-subnav-inner"></div>
-    </nav>
   </div>
 
   <main id="app" aria-live="polite">

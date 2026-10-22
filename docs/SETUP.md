@@ -27,15 +27,22 @@ row; add any columns you like, but these are recognized by the app:
 | `role`      | no       | who can see/load this module: blank = everyone (incl. logged-out visitors); `customer` = any logged-in account; `technician` = technician/admin only; `admin` = admin only (see "Passwordless login" below for the role hierarchy) |
 | `description` | no     | sub-nav link tooltip (`title` attribute)                    |
 
-The sub-nav is a second row below the main header (its own line on desktop,
-collapsed behind a hamburger toggle on mobile - see `styles.css`), rebuilt
-from these columns every time the module list loads/changes (including
-right after login/logout, since `role` affects which rows a viewer gets
-back at all - see the `role` column and "Passwordless login" below).
+The sub-nav is built from these columns every time the module list loads/
+changes (including right after login/logout, since `role` affects which
+rows a viewer gets back at all - see the `role` column and "Passwordless
+login" below). There's no separate hamburger button: logged-out visitors
+don't get a modules menu at all (the avatar button just opens the login
+modal), and once logged in, the same avatar button opens a single dropdown
+with the sub-nav links on top and Profile/Account/Log out below (see
+`styles.css`'s `.account-menu-dropdown` and `.account-menu-modules`).
 `module = profile` / `module = account` rows are optional: if present they
 replace the built-in default Profile/Account page HTML (the actual field
 values are always filled in client-side from the logged-in session, never
-from the sheet).
+from the sheet). [`docs/modules/profile.html`](/docs/modules/profile.html)
+is a ready-to-paste Profile page (name/email/phone/address, wired by
+app.js's `hydrateProfileForm`/`wireProfileForm` - Code.gs's
+`handleUpdateProfile_` already rejects an email already used by another
+account).
 
 A second tab named **`Submissions`** is created automatically the first time
 a form is submitted - you don't need to create it yourself.

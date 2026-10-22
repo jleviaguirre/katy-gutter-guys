@@ -1,0 +1,37 @@
+<!--
+  Profile module - lets a logged-in user update their own name/email/phone/
+  address. Paste this ENTIRE block into the "html" column of the Modules
+  sheet, on a row with module = profile (role can stay blank - the route
+  already requires a logged-in session on its own; see app.js's
+  renderAccountRoute). title/navLabel/order/showInNav are yours to set, but
+  this page is normally reached from the avatar dropdown, not the sub-nav.
+
+  No backend changes are needed: app.js's hydrateProfileForm/wireProfileForm
+  already wire up any #profile-form with these exact field ids (they also
+  back the built-in default page used when this row doesn't exist), and
+  Code.gs's handleUpdateProfile_ already rejects an email that's already
+  used by another account.
+-->
+<div class="account-page">
+  <h1>Profile</h1>
+  <form id="profile-form">
+    <label class="login-field">
+      <span>Name</span>
+      <input type="text" id="profile-name-input" required autocomplete="name">
+    </label>
+    <label class="login-field">
+      <span>Email</span>
+      <input type="email" id="profile-email-input" required autocomplete="email">
+    </label>
+    <label class="login-field">
+      <span>Phone</span>
+      <input type="tel" id="profile-phone-input" autocomplete="tel">
+    </label>
+    <label class="login-field">
+      <span>Address</span>
+      <input type="text" id="profile-address-input" autocomplete="street-address">
+    </label>
+    <button type="submit" class="site-btn site-btn-primary login-submit">Save changes</button>
+    <p class="login-error" id="profile-error" hidden></p>
+  </form>
+</div>
