@@ -335,6 +335,8 @@ function renderSiteNav() {
   const parseOrder = (value) => (value === '' || value == null ? NaN : Number(value));
   const items = Array.from(modulesByKey.values())
     .filter((row) => isTruthyCell(row.showInNav))
+    // profile/account already have their own static links below the divider (see index.html)
+    .filter((row) => !['profile', 'account'].includes(String(row.module).toLowerCase()))
     .sort((a, b) => {
       const orderA = parseOrder(a.order);
       const orderB = parseOrder(b.order);
