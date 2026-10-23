@@ -347,7 +347,7 @@ screens), with a spacer so it doesn't overlap the Hero section under it.
         <h4>Get Started</h4>
         <ul>
           <li><a href="#rfq">Get a Free Quote</a></li>
-          <li><a href="tel:+18005551234">(800) 555-1234</a></li>
+          <li><a href="tel:+13465560660">(346) 556-0660</a></li>
           <li><a href="mailto:hello@gutterguysofkaty.example">hello@gutterguysofkaty.example</a></li>
         </ul>
       </div>
