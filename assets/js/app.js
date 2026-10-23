@@ -197,6 +197,7 @@ function wireLogin() {
       closeModal();
       showToast(`Logged in as ${data.email}.`);
       await reloadModules();
+      window.location.hash = '#account';
       renderCurrentRoute();
     } catch (err) {
       showError(codeErrorEl, err.message);
