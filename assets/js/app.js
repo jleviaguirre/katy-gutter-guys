@@ -489,8 +489,16 @@ function updateLoginUI() {
 }
 
 function currentModuleKey() {
-  const hash = window.location.hash.replace(/^#/, '').trim();
+  const hash = window.location.hash.replace(/^#/, '').trim().split('?')[0];
   return (hash || DEFAULT_MODULE).toLowerCase();
+}
+
+/** Query-string params from the current hash route (e.g. `#quote?id=Q-123`
+ * -> { id: 'Q-123' }), for modules that need more than just the module key
+ * (see docs/modules/quote-viewer.html). */
+function currentHashParams() {
+  const query = window.location.hash.split('?')[1] || '';
+  return Object.fromEntries(new URLSearchParams(query));
 }
 
 function renderCurrentRoute() {
@@ -673,16 +681,26 @@ function executeEmbeddedScripts(container) {
  * created with dynamic headers) instead of the shared "Submissions" tab.
  */
 async function submitForm(module, formId, fields, options = {}) {
+  const token = localStorage.getItem(SESSION_TOKEN_KEY); // optional - lets the backend stamp submittedByEmail when logged in
   const response = await fetch(`${API_BASE_URL}/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ module, formId, fields, sheetName: options.sheetName })
+    body: JSON.stringify({ module, formId, fields, sheetName: options.sheetName, token })
   });
   const data = await response.json().catch(() => ({ ok: false, error: 'Invalid response' }));
   if (!data.ok) {
     throw new Error(data.error || 'Submission failed');
   }
   return data;
+}
+
+/** Exposed as window.RainGuard.apiRequest for sheet-authored module
+ * scripts that need an authenticated backend action (e.g. the account
+ * Quotes/Quote Viewer modules' "listMyQuotes"/"getQuote") - same
+ * token-attaching/error-handling as the app shell's own authRequest. */
+function apiRequest(action, fields = {}) {
+  const token = localStorage.getItem(SESSION_TOKEN_KEY);
+  return authRequest(action, { token, ...fields });
 }
 
 /** Convenience: any <form class="js-remote-form"> auto-submits via the API. */
@@ -721,4 +739,4 @@ function registerServiceWorker() {
   }
 }
 
-window.RainGuard = { submitForm, showToast };
+window.RainGuard = { submitForm, showToast, apiRequest, currentHashParams };

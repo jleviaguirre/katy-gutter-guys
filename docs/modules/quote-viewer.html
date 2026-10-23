@@ -1,0 +1,247 @@
+<!--
+  Quote Viewer module - full detail view for one GutterSurvey-tab row
+  (produced by any of the three capture tools: Photo Survey, Sketch, or
+  Canvas), reached from the Quotes list's "View" link
+  (`#quote-viewer?id=<quoteId>`).
+
+  Paste this ENTIRE block into the "html" column of the Modules sheet, on a
+  row with module = quote-viewer (role = customer works well; showInNav
+  should stay unchecked - it's only ever reached via a link, never browsed
+  to directly).
+
+  Because the three capture tools don't all save the same columns, this
+  renders generically instead of assuming one fixed schema: known fields
+  (contact info, status, totals) get labeled, friendly spots; any other
+  top-level field that's a JSON array of URLs is shown as a photo/media
+  gallery (whatever its column is named); `segmentsJson` (if present) is
+  rendered as a per-segment breakdown, again generically keyed off
+  whatever fields that particular tool saved per segment; everything else
+  left over is shown in a plain details grid. No backend changes are
+  needed beyond what's already in Code.gs ({ action: "getQuote" }).
+-->
+<div class="qv-wrap" id="qv-root">
+  <a class="qv-back" href="#quotes">&larr; Back to Quotes</a>
+  <p class="qv-loading" id="qv-status">Loading&hellip;</p>
+  <div id="qv-content" hidden></div>
+</div>
+
+<style>
+  .qv-wrap { padding: 1.5rem 1.25rem 3rem; width: min(820px, 100%); margin: 0 auto; }
+  .qv-back { display: inline-block; margin-bottom: 1.25rem; color: var(--color-primary, #0b5fa5); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+  .qv-back:hover { text-decoration: underline; }
+  .qv-loading, .qv-error { color: var(--color-muted, #5b6b7a); font-size: 0.92rem; }
+  .qv-error { color: #b42318; }
+
+  .qv-header { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem; }
+  .qv-header h1 { font-size: 1.3rem; margin: 0; color: var(--color-text, #1b2733); }
+  .qv-meta { color: var(--color-muted, #5b6b7a); font-size: 0.85rem; margin: 0 0 1.5rem; }
+
+  .qv-badge {
+    display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px;
+    font-size: 0.78rem; font-weight: 700; text-transform: capitalize;
+    background: var(--color-bg, #eaf4ff); color: var(--color-primary, #0b5fa5);
+  }
+  .qv-badge[data-status="quoted"] { background: #fff4e5; color: #b45309; }
+  .qv-badge[data-status="scheduled"] { background: #eef2ff; color: #4338ca; }
+  .qv-badge[data-status="completed"] { background: #ecfdf3; color: #067647; }
+  .qv-badge[data-status="cancelled"] { background: #fef3f2; color: #b42318; }
+
+  .qv-card {
+    background: #ffffff; border: 1px solid var(--color-border, #d7e4f0);
+    border-radius: 0.75rem; padding: 1.25rem; margin-bottom: 1.25rem;
+  }
+  .qv-card h2 { font-size: 1rem; margin: 0 0 0.9rem; color: var(--color-text, #1b2733); }
+
+  .qv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }
+  .qv-field-label { font-size: 0.75rem; color: var(--color-muted, #5b6b7a); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 0.2rem; }
+  .qv-field-value { font-size: 0.95rem; color: var(--color-text, #1b2733); word-break: break-word; }
+  .qv-field-value a { color: var(--color-primary, #0b5fa5); }
+
+  .qv-diagram { max-width: 100%; border-radius: 0.5rem; border: 1px solid var(--color-border, #d7e4f0); }
+
+  .qv-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 0.6rem; }
+  .qv-gallery-item { display: block; border-radius: 0.5rem; overflow: hidden; border: 1px solid var(--color-border, #d7e4f0); background: var(--color-bg, #eaf4ff); aspect-ratio: 1; }
+  .qv-gallery-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  .qv-segment { border: 1px solid var(--color-border, #d7e4f0); border-radius: 0.5rem; padding: 0.85rem; margin-bottom: 0.75rem; }
+  .qv-segment:last-child { margin-bottom: 0; }
+  .qv-segment-title { font-weight: 700; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--color-text, #1b2733); }
+  .qv-segment-fields { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; font-size: 0.85rem; color: var(--color-muted, #5b6b7a); margin-bottom: 0.5rem; }
+  .qv-segment-fields span strong { color: var(--color-text, #1b2733); font-weight: 600; }
+
+  .qv-notes { white-space: pre-wrap; font-size: 0.92rem; color: var(--color-text, #1b2733); }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  var statusEl = document.getElementById('qv-status');
+  var contentEl = document.getElementById('qv-content');
+
+  if (!contentEl || !window.RainGuard || !window.RainGuard.apiRequest) {
+    if (statusEl) statusEl.textContent = 'Could not load required scripts. Please refresh the page.';
+    return;
+  }
+
+  // Fields rendered in their own dedicated spots - left out of the generic
+  // "Details" grid and the auto-detected media galleries below.
+  var HANDLED_KEYS = [
+    'timestamp', 'module', 'formId', 'quoteId', 'rfqNumber', 'status', 'submittedByEmail',
+    'contactName', 'contactPhone', 'contactEmail', 'serviceAddress', 'notes', 'diagramUrl',
+    'segmentsJson', 'gpsLat', 'gpsLng'
+  ];
+
+  function escapeHtml(value) {
+    var div = document.createElement('div');
+    div.textContent = value == null ? '' : String(value);
+    return div.innerHTML;
+  }
+
+  function formatDate(value) {
+    if (!value) return '\u2014';
+    var date = new Date(value);
+    if (isNaN(date.getTime())) return String(value);
+    return date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+
+  /** "totalGutterFt" -> "Total Gutter Ft" */
+  function nicifyLabel(key) {
+    var spaced = String(key).replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+    return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  }
+
+  /** Parses a value as a JSON array, returning it only if every item is a
+   * non-empty string (i.e. it looks like a list of media URLs). */
+  function asUrlArray(value) {
+    if (!value || typeof value !== 'string') return null;
+    var trimmed = value.trim();
+    if (trimmed.charAt(0) !== '[') return null;
+    try {
+      var parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed) && parsed.every(function (v) { return typeof v === 'string' && v; })) return parsed;
+    } catch (err) { /* not JSON - ignore */ }
+    return null;
+  }
+
+  function renderGallery(urls) {
+    return '<div class="qv-gallery">' + urls.map(function (url) {
+      return '<a class="qv-gallery-item" href="' + escapeHtml(url) + '" target="_blank" rel="noopener">' +
+        '<img src="' + escapeHtml(url) + '" alt="" loading="lazy">' +
+      '</a>';
+    }).join('') + '</div>';
+  }
+
+  function renderSegments(segmentsJson) {
+    var segments;
+    try { segments = JSON.parse(segmentsJson); } catch (err) { return ''; }
+    if (!Array.isArray(segments) || !segments.length) return '';
+
+    var rows = segments.map(function (seg, index) {
+      var fieldsHtml = '';
+      var galleryHtml = '';
+      Object.keys(seg).forEach(function (key) {
+        var value = seg[key];
+        if (Array.isArray(value)) {
+          if (value.length) galleryHtml += renderGallery(value);
+          return;
+        }
+        if (value === '' || value == null) return;
+        fieldsHtml += '<span><strong>' + escapeHtml(nicifyLabel(key)) + ':</strong> ' + escapeHtml(value) + '</span>';
+      });
+      return (
+        '<div class="qv-segment">' +
+          '<div class="qv-segment-title">Segment ' + (index + 1) + '</div>' +
+          '<div class="qv-segment-fields">' + fieldsHtml + '</div>' +
+          galleryHtml +
+        '</div>'
+      );
+    }).join('');
+
+    return '<div class="qv-card"><h2>Segments</h2>' + rows + '</div>';
+  }
+
+  function renderField(label, value, html) {
+    return (
+      '<div>' +
+        '<div class="qv-field-label">' + escapeHtml(label) + '</div>' +
+        '<div class="qv-field-value">' + (html || escapeHtml(value)) + '</div>' +
+      '</div>'
+    );
+  }
+
+  function render(quote) {
+    var status = quote.status || 'New';
+    var quoteNumber = quote.rfqNumber || quote.quoteId || '\u2014';
+
+    var html = '';
+
+    html += '<div class="qv-header"><h1>Quote ' + escapeHtml(quoteNumber) + '</h1>' +
+      '<span class="qv-badge" data-status="' + escapeHtml(status.toLowerCase()) + '">' + escapeHtml(status) + '</span></div>';
+    html += '<p class="qv-meta">Requested ' + escapeHtml(formatDate(quote.timestamp)) + '</p>';
+
+    // Contact card
+    var contactFields = '';
+    if (quote.contactName) contactFields += renderField('Name', quote.contactName);
+    if (quote.contactPhone) contactFields += renderField('Phone', null, '<a href="tel:' + escapeHtml(quote.contactPhone) + '">' + escapeHtml(quote.contactPhone) + '</a>');
+    if (quote.contactEmail) contactFields += renderField('Email', null, '<a href="mailto:' + escapeHtml(quote.contactEmail) + '">' + escapeHtml(quote.contactEmail) + '</a>');
+    if (quote.serviceAddress) contactFields += renderField('Service address', quote.serviceAddress);
+    if (quote.gpsLat && quote.gpsLng) {
+      var mapsUrl = 'https://www.google.com/maps?q=' + encodeURIComponent(quote.gpsLat + ',' + quote.gpsLng);
+      contactFields += renderField('Location', null, '<a href="' + escapeHtml(mapsUrl) + '" target="_blank" rel="noopener">View on map</a>');
+    }
+    if (contactFields) html += '<div class="qv-card"><h2>Contact</h2><div class="qv-grid">' + contactFields + '</div></div>';
+
+    // Diagram
+    if (quote.diagramUrl) {
+      html += '<div class="qv-card"><h2>Diagram</h2><img class="qv-diagram" src="' + escapeHtml(quote.diagramUrl) + '" alt="Gutter diagram"></div>';
+    }
+
+    // Segments
+    if (quote.segmentsJson) html += renderSegments(quote.segmentsJson);
+
+    // Any other JSON-array-of-URLs column - a generic media gallery.
+    var galleryFields = '';
+    Object.keys(quote).forEach(function (key) {
+      if (HANDLED_KEYS.indexOf(key) !== -1) return;
+      var urls = asUrlArray(quote[key]);
+      if (urls && urls.length) {
+        galleryFields += '<h2>' + escapeHtml(nicifyLabel(key)) + '</h2>' + renderGallery(urls);
+        HANDLED_KEYS.push(key);
+      }
+    });
+    if (galleryFields) html += '<div class="qv-card">' + galleryFields + '</div>';
+
+    // Notes
+    if (quote.notes) html += '<div class="qv-card"><h2>Notes</h2><div class="qv-notes">' + escapeHtml(quote.notes) + '</div></div>';
+
+    // Everything else left over - a generic details grid.
+    var detailFields = '';
+    Object.keys(quote).forEach(function (key) {
+      if (HANDLED_KEYS.indexOf(key) !== -1) return;
+      var value = quote[key];
+      if (value === '' || value == null) return;
+      detailFields += renderField(nicifyLabel(key), value);
+    });
+    if (detailFields) html += '<div class="qv-card"><h2>Details</h2><div class="qv-grid">' + detailFields + '</div></div>';
+
+    contentEl.innerHTML = html;
+    statusEl.hidden = true;
+    contentEl.hidden = false;
+  }
+
+  var quoteId = (window.RainGuard.currentHashParams().id || '').trim();
+  if (!quoteId) {
+    statusEl.textContent = 'No quote specified.';
+    statusEl.className = 'qv-error';
+    return;
+  }
+
+  window.RainGuard.apiRequest('getQuote', { quoteId: quoteId })
+    .then(function (data) { render(data.quote); })
+    .catch(function (err) {
+      statusEl.textContent = err && err.message ? err.message : 'Could not load this quote.';
+      statusEl.className = 'qv-error';
+    });
+})();
+</script>

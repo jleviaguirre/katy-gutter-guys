@@ -1,0 +1,137 @@
+<!--
+  Quotes module - lists the signed-in customer's gutter survey/quote
+  requests (from the shared "GutterSurvey" tab fed by the Photo Survey,
+  Sketch, and Canvas capture tools), with a link to view each one's full
+  details. An admin sees every customer's rows instead of just their own.
+
+  Paste this ENTIRE block into the "html" column of the Modules sheet, on a
+  row with module = quotes (role = customer works well - keeps it out of
+  guests' reach; it's normally reached from the Account menu, not the
+  sub-nav, so showInNav can stay unchecked).
+
+  No backend changes are needed beyond what's already in Code.gs: every
+  GutterSurvey submission is auto-stamped with `submittedByEmail`, a
+  `quoteId`, and a default `status` of "New", and the
+  { action: "listMyQuotes" } endpoint already scopes/sorts rows for this
+  exact table (also used by docs/modules/quote-viewer.html, which this
+  table's "View" links point at via `#quote-viewer?id=<quoteId>`).
+-->
+<div class="qt-wrap" id="qt-root">
+  <h1>Quotes</h1>
+  <p class="qt-loading" id="qt-status">Loading&hellip;</p>
+  <div class="qt-table-wrap" id="qt-table-wrap" hidden>
+    <table class="qt-table">
+      <thead>
+        <tr>
+          <th>Request date</th>
+          <th>Quote #</th>
+          <th>Name</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="qt-rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+  .qt-wrap { padding: 1.5rem 1.25rem 3rem; width: min(820px, 100%); margin: 0 auto; }
+  .qt-wrap h1 { font-size: 1.3rem; margin: 0 0 1.25rem; color: var(--color-text, #1b2733); }
+  .qt-loading, .qt-empty, .qt-error { color: var(--color-muted, #5b6b7a); font-size: 0.92rem; }
+  .qt-error { color: #b42318; }
+
+  .qt-table-wrap {
+    background: #ffffff;
+    border: 1px solid var(--color-border, #d7e4f0);
+    border-radius: 0.75rem;
+    overflow-x: auto;
+  }
+  .qt-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  .qt-table th, .qt-table td { text-align: left; padding: 0.75rem 1rem; white-space: nowrap; }
+  .qt-table th { color: var(--color-muted, #5b6b7a); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; border-bottom: 1px solid var(--color-border, #d7e4f0); }
+  .qt-table tbody tr + tr td { border-top: 1px solid var(--color-border, #d7e4f0); }
+  .qt-table td.qt-cell-name { white-space: normal; }
+
+  .qt-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    background: var(--color-bg, #eaf4ff);
+    color: var(--color-primary, #0b5fa5);
+    text-transform: capitalize;
+  }
+  .qt-badge[data-status="quoted"] { background: #fff4e5; color: #b45309; }
+  .qt-badge[data-status="scheduled"] { background: #eef2ff; color: #4338ca; }
+  .qt-badge[data-status="completed"] { background: #ecfdf3; color: #067647; }
+  .qt-badge[data-status="cancelled"] { background: #fef3f2; color: #b42318; }
+
+  .qt-view-link { color: var(--color-primary, #0b5fa5); font-weight: 700; text-decoration: none; font-size: 0.85rem; }
+  .qt-view-link:hover { text-decoration: underline; }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  var rootEl = document.getElementById('qt-root');
+  var statusEl = document.getElementById('qt-status');
+  var tableWrapEl = document.getElementById('qt-table-wrap');
+  var rowsEl = document.getElementById('qt-rows');
+
+  if (!rootEl || !window.RainGuard || !window.RainGuard.apiRequest) {
+    if (rootEl) statusEl.textContent = 'Could not load required scripts. Please refresh the page.';
+    return;
+  }
+
+  function escapeHtml(value) {
+    var div = document.createElement('div');
+    div.textContent = value == null ? '' : String(value);
+    return div.innerHTML;
+  }
+
+  function formatDate(value) {
+    if (!value) return '\u2014';
+    var date = new Date(value);
+    if (isNaN(date.getTime())) return String(value);
+    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function renderRows(quotes) {
+    rowsEl.innerHTML = quotes.map(function (q) {
+      var status = q.status || 'New';
+      var viewLink = q.quoteId
+        ? '<a class="qt-view-link" href="#quote-viewer?id=' + encodeURIComponent(q.quoteId) + '">View &rarr;</a>'
+        : '\u2014';
+      return (
+        '<tr>' +
+          '<td>' + escapeHtml(formatDate(q.requestDate)) + '</td>' +
+          '<td>' + escapeHtml(q.rfqNumber || '\u2014') + '</td>' +
+          '<td class="qt-cell-name">' + escapeHtml(q.name || '\u2014') + '</td>' +
+          '<td><span class="qt-badge" data-status="' + escapeHtml(status.toLowerCase()) + '">' + escapeHtml(status) + '</span></td>' +
+          '<td>' + viewLink + '</td>' +
+        '</tr>'
+      );
+    }).join('');
+  }
+
+  window.RainGuard.apiRequest('listMyQuotes')
+    .then(function (data) {
+      var quotes = data.quotes || [];
+      if (!quotes.length) {
+        statusEl.textContent = 'No quote requests yet.';
+        statusEl.className = 'qt-empty';
+        return;
+      }
+      statusEl.hidden = true;
+      tableWrapEl.hidden = false;
+      renderRows(quotes);
+    })
+    .catch(function (err) {
+      statusEl.textContent = err && err.message ? err.message : 'Could not load your quotes.';
+      statusEl.className = 'qt-error';
+    });
+})();
+</script>

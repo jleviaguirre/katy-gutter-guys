@@ -1,0 +1,91 @@
+<!--
+  Account module - the landing page for a logged-in user's own area, a
+  simple menu of cards pointing at other modules (same idea as the
+  Masthead/menu-bar row on home.html, just account-scoped). Paste this
+  ENTIRE block into the "html" column of the Modules sheet, on a row with
+  module = account (role can stay blank - renderAccountRoute in app.js
+  already requires a logged-in session for #account/#profile on its own).
+
+  Add/remove cards here to match whatever modules you actually have. Ships
+  with 3: Quotes (docs/modules/quotes.html - working), and Activity/
+  Invoices placeholders you can point at your own modules later (or delete
+  the cards if you don't need them yet).
+-->
+<div class="acct-menu">
+  <h1>My Account</h1>
+  <p class="acct-menu-hint">Manage your quotes and account activity.</p>
+  <div class="acct-menu-grid">
+    <a class="acct-menu-card" href="#quotes">
+      <span class="acct-menu-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6M9 9h1"/></svg>
+      </span>
+      <span class="acct-menu-card-body">
+        <span class="acct-menu-card-title">Quotes</span>
+        <span class="acct-menu-card-desc">See your gutter survey/quote requests and their status.</span>
+      </span>
+    </a>
+    <a class="acct-menu-card" href="#activity">
+      <span class="acct-menu-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      </span>
+      <span class="acct-menu-card-body">
+        <span class="acct-menu-card-title">Activity</span>
+        <span class="acct-menu-card-desc">Recent account activity and updates.</span>
+      </span>
+    </a>
+    <a class="acct-menu-card" href="#invoices">
+      <span class="acct-menu-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      </span>
+      <span class="acct-menu-card-body">
+        <span class="acct-menu-card-title">Invoices</span>
+        <span class="acct-menu-card-desc">Billing history and payment status.</span>
+      </span>
+    </a>
+  </div>
+</div>
+
+<style>
+  .acct-menu { padding: 1.5rem 1.25rem 3rem; width: min(760px, 100%); margin: 0 auto; }
+  .acct-menu h1 { font-size: 1.3rem; margin: 0 0 0.35rem; color: var(--color-text, #1b2733); }
+  .acct-menu-hint { margin: 0 0 1.5rem; color: var(--color-muted, #5b6b7a); font-size: 0.9rem; }
+
+  .acct-menu-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .acct-menu-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    padding: 1.25rem;
+    background: #ffffff;
+    border: 1px solid var(--color-border, #d7e4f0);
+    border-radius: 0.75rem;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .acct-menu-card:hover {
+    border-color: var(--color-primary, #0b5fa5);
+    box-shadow: 0 8px 20px rgba(11, 95, 165, 0.1);
+  }
+
+  .acct-menu-icon {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: var(--color-bg, #eaf4ff);
+    color: var(--color-primary, #0b5fa5);
+  }
+
+  .acct-menu-card-body { display: flex; flex-direction: column; gap: 0.25rem; }
+  .acct-menu-card-title { font-weight: 700; color: var(--color-text, #1b2733); }
+  .acct-menu-card-desc { font-size: 0.85rem; color: var(--color-muted, #5b6b7a); }
+</style>

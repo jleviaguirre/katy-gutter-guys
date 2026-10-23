@@ -355,6 +355,49 @@ block, a quick load in a browser) before pasting it into the Sheet. If any
 future module hits the same comment-trimming pain, this is the template
 to follow for it too.
 
+## Account menu + Quotes / Quote Viewer modules
+
+[`docs/modules/account.html`](/docs/modules/account.html) is the signed-in
+landing page (module = `account`) - a simple grid of cards linking to
+other account modules. It ships with 3: Quotes (working), and Activity/
+Invoices placeholder cards you can point at your own modules whenever you
+build them.
+
+[`docs/modules/quotes.html`](/docs/modules/quotes.html) (module = `quotes`,
+`role` = `customer` recommended) lists the signed-in customer's rows from
+the shared `GutterSurvey` tab (fed by the Photo Survey/Sketch/Canvas
+capture tools) as a table: request date, quote #, name, status, and a
+"View" link - an admin sees every customer's rows instead of just their
+own. [`docs/modules/quote-viewer.html`](/docs/modules/quote-viewer.html)
+(module = `quote-viewer`, same `role`) is what that link opens
+(`#quote-viewer?id=<quoteId>`) - a full detail view (contact info,
+diagram, per-segment breakdown, photos/media, notes) that renders
+generically instead of assuming one fixed schema, since the three capture
+tools don't all save the same columns.
+
+This relies on a few small, backward-compatible additions already in
+Code.gs:
+
+- Every submission that lands in the `GutterSurvey` tab (regardless of
+  which capture tool sent it) is auto-stamped with `submittedByEmail` (the
+  signed-in submitter - never trusted from client-sent fields) and, if not
+  already present, a short unique `quoteId` and a default `status` of
+  `"New"`. `status` is otherwise just a plain cell meant to be updated by
+  hand in the Sheet as a visit is worked (e.g. "New" -> "Quoted" ->
+  "Scheduled" -> "Completed").
+- `POST { action: "listMyQuotes", token }` returns the signed-in user's own
+  rows (or every row for an admin), trimmed to what the Quotes table needs.
+- `POST { action: "getQuote", token, quoteId }` returns one full row (every
+  column), gated to its owner or an admin - a guessed/unowned `quoteId`
+  gets the same "Quote not found" error as a nonexistent one, rather than
+  confirming it exists.
+- `window.RainGuard.apiRequest(action, fields)` is a small helper exposed
+  for sheet-authored module scripts to call either of the above (it
+  attaches the signed-in session token automatically), and
+  `window.RainGuard.currentHashParams()` reads query-string-style params
+  off the current hash route (e.g. `#quote-viewer?id=Q-123` -> `{ id:
+  'Q-123' }`) - both used by `quotes.html`/`quote-viewer.html` above.
+
 ## Fixed site header
 
 The header (logo, phone number, "Get a Free Quote"/"Login" buttons) is

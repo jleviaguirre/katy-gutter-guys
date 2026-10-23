@@ -25,6 +25,7 @@ var SUBMISSIONS_SHEET_NAME = 'Submissions';
 var LANDING_SHEET_NAME = 'landing page';
 var USERS_SHEET_NAME = 'Users';
 var SESSIONS_SHEET_NAME = 'Sessions';
+var SURVEY_SHEET_NAME = 'GutterSurvey'; // shared by gutter-survey/-sketch/-canvas, and the account Quotes/Quote Viewer modules
 var LOGIN_CODE_COOLDOWN_MS = 30 * 1000; // min time between code requests for the same email
 var LOGIN_MAX_FAILED_ATTEMPTS = 5; // wrong-code attempts allowed before a fresh code is required
 
@@ -130,11 +131,18 @@ function doPost(e) {
     if (body.action === 'updateProfile') {
       return handleUpdateProfile_(body);
     }
+    if (body.action === 'listMyQuotes') {
+      return handleListMyQuotes_(body);
+    }
+    if (body.action === 'getQuote') {
+      return handleGetQuote_(body);
+    }
 
     var module = body.module || 'unknown';
     var formId = body.formId || 'default';
     var fields = body.fields || {};
     var sheetName = body.sheetName || SUBMISSIONS_SHEET_NAME;
+    var submitterIdentity = resolveViewerIdentity_(body.token); // optional - set automatically by app.js's submitForm when logged in
 
     var processedFields = {};
     Object.keys(fields).forEach(function (key) {
@@ -145,6 +153,16 @@ function doPost(e) {
         processedFields[key] = value;
       }
     });
+
+    // submittedByEmail is never trusted from client-sent fields - only ever
+    // the signed-in session's own email, same rule as everywhere else.
+    if (submitterIdentity) {
+      processedFields.submittedByEmail = submitterIdentity.email;
+    }
+    if (sheetName === SURVEY_SHEET_NAME) {
+      if (!processedFields.quoteId) processedFields.quoteId = generateQuoteId_();
+      if (!processedFields.status) processedFields.status = 'New';
+    }
 
     var sheet = getSheet_(sheetName, true);
     var row = Object.assign(
@@ -198,13 +216,21 @@ function handleListModules_(body) {
  * public modules only), or '' for a valid but unverified (blank-role)
  * account, which is treated the same as "customer" by canViewModule_. */
 function resolveViewerRole_(token) {
+  var identity = resolveViewerIdentity_(token);
+  return identity ? identity.role : null;
+}
+
+/** Resolves a token to { email, role }, or null for a missing/invalid/
+ * expired token - the same lookup resolveViewerRole_ does, but also
+ * returning the email so handlers can scope data to "my own rows". */
+function resolveViewerIdentity_(token) {
   var session = findSessionByToken_(token);
   if (!session) return null;
   var usersSheet = getUsersSheet_();
   var rowIndex = findRowIndexByColumn_(usersSheet, 'email', session.email);
   if (rowIndex === -1) return null;
   var user = rowToObjectAt_(usersSheet, rowIndex);
-  return user.role || '';
+  return { email: session.email, role: user.role || '' };
 }
 
 /** Role hierarchy for the Modules tab's `role` column: blank = public
@@ -433,6 +459,92 @@ function retargetSessionsEmail_(oldEmail, newEmail) {
       sheet.getRange(i + 1, emailCol + 1).setValue(newEmail);
     }
   }
+}
+
+/**
+ * Account "Quotes" module support
+ * ---------------------------------------------------------------------------
+ * Every submission routed to the shared `GutterSurvey` tab (from any of the
+ * three capture tools - Photo Survey, Sketch, Canvas) is auto-stamped by
+ * doPost with `submittedByEmail` (the signed-in submitter, never trusted
+ * from client fields) and, if missing, a `quoteId` (generateQuoteId_) and a
+ * default `status` of "New". That's what lets a customer's Quotes list
+ * (handleListMyQuotes_) find "their" rows, and the Quote Viewer module
+ * (handleGetQuote_) load one specific row by its quoteId - an admin sees/
+ * opens every row regardless of who submitted it. `status` is otherwise
+ * just a plain cell meant to be updated by hand in the Sheet (e.g. "New" ->
+ * "Quoted" -> "Scheduled" -> "Completed") as a visit is worked.
+ */
+
+/** Short, readable, unique id stamped onto a GutterSurvey row that didn't
+ * already carry one - used to look up that exact row later (handleGetQuote_)
+ * without depending on `rfqNumber`, which not every capture tool collects. */
+function generateQuoteId_() {
+  return 'Q-' + Utilities.getUuid().replace(/-/g, '').slice(0, 8).toUpperCase();
+}
+
+/** POST { action: "listMyQuotes", token } -> { ok: true, quotes: [...] }.
+ * Trimmed-down GutterSurvey rows (request date, quote #, name, status,
+ * quoteId to link to the Quote Viewer) for the signed-in user, or every
+ * row for an admin - see the "Account Quotes module support" notes above. */
+function handleListMyQuotes_(body) {
+  var identity = resolveViewerIdentity_(body.token);
+  if (!identity) {
+    throw new Error('Not logged in.');
+  }
+
+  var sheet;
+  try {
+    sheet = getSheet_(SURVEY_SHEET_NAME);
+  } catch (err) {
+    return jsonOutput_({ ok: true, quotes: [] }); // no surveys submitted yet
+  }
+
+  var quotes = sheetToObjects_(sheet)
+    .filter(function (row) {
+      return identity.role === 'admin' ||
+        String(row.submittedByEmail || '').trim().toLowerCase() === identity.email;
+    })
+    .map(function (row) {
+      return {
+        quoteId: row.quoteId || '',
+        rfqNumber: row.rfqNumber || row.quoteId || '',
+        name: row.contactName || '',
+        status: row.status || 'New',
+        requestDate: row.timestamp || ''
+      };
+    });
+
+  quotes.sort(function (a, b) { return new Date(b.requestDate) - new Date(a.requestDate); });
+  return jsonOutput_({ ok: true, quotes: quotes });
+}
+
+/** POST { action: "getQuote", token, quoteId } -> { ok: true, quote: {...} }.
+ * The full GutterSurvey row (every column, whichever capture tool produced
+ * it) for the Quote Viewer module - "Quote not found" (rather than a
+ * forbidden-style error) for anything the signed-in user doesn't own, so a
+ * guessed quoteId can't be used to confirm another customer's quote exists. */
+function handleGetQuote_(body) {
+  var identity = resolveViewerIdentity_(body.token);
+  if (!identity) {
+    throw new Error('Not logged in.');
+  }
+  var quoteId = String(body.quoteId || '').trim();
+  if (!quoteId) {
+    throw new Error('Missing quote id.');
+  }
+
+  var sheet = getSheet_(SURVEY_SHEET_NAME);
+  var rowIndex = findRowIndexByColumn_(sheet, 'quoteId', quoteId);
+  if (rowIndex === -1) {
+    throw new Error('Quote not found.');
+  }
+  var row = rowToObjectAt_(sheet, rowIndex);
+  if (identity.role !== 'admin' && String(row.submittedByEmail || '').trim().toLowerCase() !== identity.email) {
+    throw new Error('Quote not found.');
+  }
+
+  return jsonOutput_({ ok: true, quote: row });
 }
 
 /** POST { action: "touchSession", token } -> { ok: true }. Called
